@@ -1,0 +1,23 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Build and test output
+dist/
+coverage/
+*.tsbuildinfo
+
+# Logs and runtime files
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+
+# Local tooling and OS files
+.DS_Store
+.idea/
+.vscode/
