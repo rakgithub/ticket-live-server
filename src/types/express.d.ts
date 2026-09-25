@@ -5,6 +5,8 @@ declare global {
     interface Request {
       auth?: {
         userId: string;
+        tokenId: string;
+        expiresAt: Date;
       };
     }
   }
