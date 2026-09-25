@@ -1,6 +1,6 @@
 import express from 'express';
 import "dotenv/config";
-import productRoutes from './routes/productRoutes.ts';
+
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -16,8 +16,6 @@ app.use(cors());
 app.use(morgan('dev')); // LOGGING
 app.use(express.json()) // ENABLE JSON BODY PARSING
 
-// ROUTES
-app.use('/products', productRoutes);
 app.use('/', authRoutes);
 
 const port = process.env.PORT ?? 4002;

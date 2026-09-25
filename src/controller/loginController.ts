@@ -4,6 +4,7 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { db } from "../db/client.ts";
 import { usersTable } from "../db/schema/users.ts";
+import { createAccessToken } from "../auth/accessToken.ts";
 
 const loginBodySchema = z.object({
   email: z.email().trim().toLowerCase(),
@@ -35,7 +36,11 @@ export async function login(req: Request, res: Response): Promise<void> {
     return;
   }
 
+  const accessToken = await createAccessToken(user.id);
+
   res.status(200).json({
+    accessToken,
+    tokenType: "Bearer",
     user: {
       id: user.id,
       name: user.name,
