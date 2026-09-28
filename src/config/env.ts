@@ -15,6 +15,14 @@ const envSchema = z.object({
     .string()
     .regex(/^\d+[smhd]$/, "ACCESS_TOKEN_TTL must look like 15m, 1h, or 1d")
     .default("15m"),
+  MOCK_PAYMENT_DELAY_MS: z.coerce.number().int().min(0).max(30_000).default(1_500),
+  MOCK_PAYMENT_FAILURE_RATE: z.coerce.number().min(0).max(1).default(0),
+  PAYMENT_RESERVATION_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(60)
+    .max(3_600)
+    .default(900),
   CORS_ORIGINS: z
     .string()
     .default("http://localhost:3000,http://localhost:5173"),

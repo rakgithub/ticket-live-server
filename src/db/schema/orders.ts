@@ -28,6 +28,7 @@ export const ordersTable = pgTable(
     ticketPriceCents: integer("ticket_price_cents").notNull(),
     currencyCode: char("currency_code", { length: 3 }).notNull(),
     totalAmountCents: integer("total_amount_cents").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

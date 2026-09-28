@@ -8,6 +8,7 @@ import { requireAuth } from "./auth/requireAuth.ts";
 import authRoutes from "./routes/authRoutes.ts";
 import eventsRoutes from "./routes/eventsRoutes.ts";
 import { elasticsearch } from "./search/client.ts";
+import ordersRoutes from "./routes/ordersRoutes.ts";
 
 const app = express();
 
@@ -32,6 +33,7 @@ app.use("/", authRoutes);
 // Keep future application routers below this line so they require a verified access token.
 app.use(requireAuth);
 app.use("/events", eventsRoutes);
+app.use("/orders", ordersRoutes);
 
 app.use((_req, res) => {
   res.status(404).json({ error: "Route not found" });
