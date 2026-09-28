@@ -4,6 +4,7 @@ import {
   createEvent,
   getEvents,
 } from "../../services/events/eventsService.ts";
+import { searchEvents } from "../../services/events/eventsSearchService.ts";
 
 const createEventBodySchema = z
   .object({
@@ -29,8 +30,29 @@ const createEventBodySchema = z
     path: ["maxPeople"],
   });
 
+const searchEventsQuerySchema = z.object({
+  q: z.string().trim().min(1).max(200),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+
 export async function getAllEvents(_req: Request, res: Response): Promise<void> {
   const events = await getEvents();
+  res.status(200).json({ events });
+}
+
+export async function getSearchEvents(req: Request, res: Response): Promise<void> {
+  const parsedQuery = searchEventsQuerySchema.safeParse(req.query);
+
+  if (!parsedQuery.success) {
+    res.status(400).json({ error: "Invalid search query" });
+    return;
+  }
+
+  const events = await searchEvents({
+    query: parsedQuery.data.q,
+    limit: parsedQuery.data.limit,
+  });
+
   res.status(200).json({ events });
 }
 

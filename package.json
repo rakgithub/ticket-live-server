@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node src/server.ts"
+    "start": "node src/server.ts",
+    "start:worker": "node src/workers/outboxWorkerMain.ts"
   },
   "keywords": [],
   "author": "",
@@ -20,6 +21,7 @@
   "packageManager": "pnpm@11.24.0",
   "type": "module",
   "dependencies": {
+    "@elastic/elasticsearch": "~9.5.1",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "drizzle-orm": "1.0.0-rc.4",

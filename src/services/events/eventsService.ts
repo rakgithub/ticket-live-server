@@ -1,6 +1,7 @@
 import { asc, isNull } from "drizzle-orm";
 import { db } from "../../db/client.ts";
 import { eventsTable } from "../../db/schema/events.ts";
+import { outboxEventsTable } from "../../db/schema/outboxEvents.ts";
 
 export type CreateEventInput = {
   name: string;
@@ -44,13 +45,26 @@ export async function createEvent(
   userId: string,
   input: CreateEventInput,
 ) {
-  const [event] = await db
-    .insert(eventsTable)
-    .values({
-      ...input,
-      userId,
-    })
-    .returning(eventSelection);
+  return db.transaction(async (tx) => {
+    const [event] = await tx
+      .insert(eventsTable)
+      .values({
+        ...input,
+        userId,
+      })
+      .returning(eventSelection);
 
-  return event;
+    await tx.insert(outboxEventsTable).values({
+      eventType: "event.created",
+      aggregateId: event.id,
+      payload: {
+        ...event,
+        startsAt: event.startsAt.toISOString(),
+        createdAt: event.createdAt.toISOString(),
+        updatedAt: event.updatedAt.toISOString(),
+      },
+    });
+
+    return event;
+  });
 }

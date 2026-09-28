@@ -7,6 +7,7 @@ import { pool } from "./db/client.ts";
 import { requireAuth } from "./auth/requireAuth.ts";
 import authRoutes from "./routes/authRoutes.ts";
 import eventsRoutes from "./routes/eventsRoutes.ts";
+import { elasticsearch } from "./search/client.ts";
 
 const app = express();
 
@@ -65,13 +66,18 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     console.log(`Received ${signal}; shutting down`);
 
     server.close((error) => {
-      if (error) {
+      if (error && (error as NodeJS.ErrnoException).code !== "ERR_SERVER_NOT_RUNNING") {
         console.error("HTTP server shutdown failed", error);
         process.exitCode = 1;
       }
 
       void pool.end().catch((poolError) => {
         console.error("Database pool shutdown failed", poolError);
+        process.exitCode = 1;
+      });
+
+      void elasticsearch.close().catch((elasticsearchError) => {
+        console.error("Elasticsearch client shutdown failed", elasticsearchError);
         process.exitCode = 1;
       });
     });
