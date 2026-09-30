@@ -2,6 +2,10 @@ import { asc, eq, isNull, sql } from "drizzle-orm";
 import { env } from "../config/env.ts";
 import { db } from "../db/client.ts";
 import { outboxEventsTable } from "../db/schema/outboxEvents.ts";
+import {
+  publishOrderConfirmation,
+  type OrderConfirmationMessage,
+} from "../messaging/publishOrderConfirmation.ts";
 import { elasticsearch } from "../search/client.ts";
 import { ensureEventsIndex, eventsIndexName } from "../search/eventsIndex.ts";
 
@@ -12,27 +16,39 @@ async function processOutboxEvent(event: {
   eventType: string;
   aggregateId: string;
   payload: Record<string, unknown>;
+  createdAt: Date;
 }): Promise<void> {
-  if (event.eventType !== "event.created") {
-    throw new Error(`Unsupported outbox event type: ${event.eventType}`);
+  if (event.eventType === "event.created") {
+    await ensureEventsIndex();
+    await elasticsearch.index({
+      index: eventsIndexName,
+      id: event.aggregateId,
+      document: event.payload,
+    });
+    return;
   }
 
-  await elasticsearch.index({
-    index: eventsIndexName,
-    id: event.aggregateId,
-    document: event.payload,
-  });
+  if (event.eventType === "order.confirmed") {
+    await publishOrderConfirmation({
+      eventId: event.id,
+      eventType: "order.confirmed",
+      occurredAt: event.createdAt.toISOString(),
+      data: event.payload as OrderConfirmationMessage["data"],
+    });
+    return;
+  }
+
+  throw new Error(`Unsupported outbox event type: ${event.eventType}`);
 }
 
 export async function processOutboxBatch(): Promise<number> {
-  await ensureEventsIndex();
-
   const pendingEvents = await db
     .select({
       id: outboxEventsTable.id,
       eventType: outboxEventsTable.eventType,
       aggregateId: outboxEventsTable.aggregateId,
       payload: outboxEventsTable.payload,
+      createdAt: outboxEventsTable.createdAt,
     })
     .from(outboxEventsTable)
     .where(isNull(outboxEventsTable.processedAt))
@@ -58,7 +74,7 @@ export async function processOutboxBatch(): Promise<number> {
         })
         .where(eq(outboxEventsTable.id, event.id));
 
-      console.error(`Failed to index outbox event ${event.id}`, error);
+      console.error(`Failed to process outbox event ${event.id}`, error);
     }
   }
 

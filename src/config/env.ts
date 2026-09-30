@@ -9,6 +9,7 @@ const envSchema = z.object({
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   ELASTICSEARCH_URL: z.url("ELASTICSEARCH_URL must be a valid URL"),
+  AMQP_URL: z.string().min(1, "AMQP_URL is required"),
   OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().min(100).default(2_000),
   JWT_SECRET: z.string().min(1, "JWT_SECRET is required"),
   ACCESS_TOKEN_TTL: z

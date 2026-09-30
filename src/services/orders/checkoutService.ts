@@ -4,7 +4,9 @@ import { env } from "../../config/env.ts";
 import { db } from "../../db/client.ts";
 import { eventsTable } from "../../db/schema/events.ts";
 import { ordersTable } from "../../db/schema/orders.ts";
+import { outboxEventsTable } from "../../db/schema/outboxEvents.ts";
 import { paymentsTable } from "../../db/schema/payments.ts";
+import { usersTable } from "../../db/schema/users.ts";
 import { mockPaymentProvider } from "../payments/mockPaymentProvider.ts";
 
 export type CheckoutInput = {
@@ -165,6 +167,46 @@ async function confirmPayment(orderId: string, paymentId: string) {
     if (!payment) {
       throw new CheckoutError("Payment could not be confirmed", 409);
     }
+
+    const [confirmation] = await tx
+      .select({
+        customerName: usersTable.displayName,
+        customerEmail: usersTable.email,
+        eventId: eventsTable.id,
+        eventName: eventsTable.name,
+        eventLocation: eventsTable.location,
+        eventStartsAt: eventsTable.startsAt,
+      })
+      .from(ordersTable)
+      .innerJoin(usersTable, eq(ordersTable.userId, usersTable.id))
+      .innerJoin(eventsTable, eq(ordersTable.eventId, eventsTable.id))
+      .where(eq(ordersTable.id, order.id));
+
+    if (!confirmation) {
+      throw new Error("Confirmed order is missing its customer or event");
+    }
+
+    await tx.insert(outboxEventsTable).values({
+      eventType: "order.confirmed",
+      aggregateId: order.id,
+      payload: {
+        orderId: order.id,
+        customer: {
+          name: confirmation.customerName,
+          email: confirmation.customerEmail,
+        },
+        event: {
+          id: confirmation.eventId,
+          name: confirmation.eventName,
+          location: confirmation.eventLocation,
+          startsAt: confirmation.eventStartsAt.toISOString(),
+        },
+        quantity: order.quantity,
+        ticketPriceCents: order.ticketPriceCents,
+        totalAmountCents: order.totalAmountCents,
+        currencyCode: order.currencyCode,
+      },
+    });
 
     return { order, payment };
   });
