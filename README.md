@@ -1,5 +1,12 @@
 # Ticket Live Server
 
+Ticket Live is a Node.js API for an event ticket booking app. Users can register
+and sign in, create and search events, and check out tickets. The API stores
+events and orders in PostgreSQL, uses Elasticsearch for event search, and uses
+a mock payment provider for checkout. After an order is confirmed, a background
+worker publishes a message through RabbitMQ; the email worker currently records
+a simulated confirmation delivery.
+
 ## Local services
 
 Requirements: Docker with the Compose plugin, and pnpm.
