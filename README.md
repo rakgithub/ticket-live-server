@@ -10,15 +10,17 @@ Requirements: Docker with the Compose plugin, and pnpm.
    cp .env.example .env
    ```
 
-2. Start PostgreSQL and Elasticsearch:
+2. Start PostgreSQL, Elasticsearch, and RabbitMQ:
 
    ```sh
    docker compose up -d
    ```
 
-   PostgreSQL is available at `localhost:5433`, and Elasticsearch is available
-   at `http://localhost:9200`. Both containers keep their data in named Docker
-   volumes, so data survives container restarts.
+   PostgreSQL is available at `localhost:5433`, Elasticsearch at
+   `http://localhost:9200`, and RabbitMQ at `localhost:5672`. RabbitMQ's
+   management dashboard is at `http://localhost:15672` (`guest` / `guest`).
+   The services keep their data in named Docker volumes, so it survives
+   container restarts.
 
 3. Apply the checked-in Drizzle migrations:
 
@@ -41,6 +43,16 @@ Requirements: Docker with the Compose plugin, and pnpm.
    The API listens at `http://localhost:4002`. The worker has no HTTP port; it
    polls PostgreSQL and writes pending event documents to Elasticsearch.
 
+6. Start the email worker in a third terminal:
+
+   ```sh
+   pnpm start:email-worker
+   ```
+
+   It listens on RabbitMQ's `booking-confirmation-email` queue and currently
+   records simulated email deliveries in PostgreSQL. It does not send real
+   email or generate PDFs yet.
+
 To stop PostgreSQL while keeping its data, run `docker compose down`. To also
 delete the local database volume and all its data, run
 `docker compose down -v`.
@@ -62,8 +74,12 @@ must enable authentication and TLS.
 
 Creating an event now inserts both the event row and an `event.created` row in
 `outbox_events` within the same PostgreSQL transaction. The outbox row contains
-the event ID and a JSON snapshot for a future search indexer. If either insert
-fails, PostgreSQL rolls back both inserts.
+the event ID and a JSON snapshot for indexing. If either insert fails,
+PostgreSQL rolls back both inserts.
+
+After a checkout payment succeeds, the order, payment, and `order.confirmed`
+outbox row are committed in one PostgreSQL transaction. The API can then return
+the confirmed order without waiting for RabbitMQ or background email handling.
 
 Inspect pending outbox rows with:
 
@@ -73,14 +89,31 @@ docker compose exec postgres psql -U user -d ticket_live \
 ```
 
 Rows remain pending until the separately started background worker processes
-them. It polls every two seconds, indexes each `event.created` payload in
-Elasticsearch, and marks the row as processed after Elasticsearch accepts the
-document. Failed rows remain pending and include the failed attempt count and
+them. It polls every two seconds and routes each event by type:
+
+- `event.created` is indexed directly in Elasticsearch.
+- `order.confirmed` is published to RabbitMQ for the email worker.
+
+The worker marks an outbox row processed after its destination accepts the
+event. Failed rows remain pending and include the failed attempt count and
 error message.
 
 The worker creates an Elasticsearch `events` index on first use. Elasticsearch
 uses the PostgreSQL event ID as its document ID, so retrying the same outbox row
 updates the same document safely.
+
+The email worker validates each `order.confirmed` message, then inserts a row in
+`email_deliveries` with status `simulated`. It uses the outbox event ID to avoid
+recording the same delivery twice. To inspect those records:
+
+```sh
+docker compose exec postgres psql -U user -d ticket_live \
+  -c "SELECT order_id, recipient_email, status, created_at FROM email_deliveries ORDER BY created_at DESC;"
+```
+
+The RabbitMQ test publisher and consumer under `src/scripts/` are development
+helpers. The test consumer reads from the same queue as the email worker, so do
+not leave it running while processing real confirmation messages.
 
 ## Event search
 
