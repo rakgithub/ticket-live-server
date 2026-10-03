@@ -9,6 +9,13 @@ const envSchema = z.object({
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   ELASTICSEARCH_URL: z.url("ELASTICSEARCH_URL must be a valid URL"),
+  GEMINI_API_KEY: z
+    .string()
+    .transform((value) => value.trim() || undefined)
+    .optional(),
+  EVENT_CHAT_MODEL: z.string().trim().min(1).default("gemini-3.8-flash"),
+  EVENT_CHAT_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(30_000),
+  EVENT_CHAT_MAX_ACTIVE_PER_USER: z.coerce.number().int().min(1).max(10).default(2),
   AMQP_URL: z.string().min(1, "AMQP_URL is required"),
   OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().min(100).default(2_000),
   JWT_SECRET: z.string().min(1, "JWT_SECRET is required"),

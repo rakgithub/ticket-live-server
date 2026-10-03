@@ -1,4 +1,4 @@
-import { asc, isNull } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull } from "drizzle-orm";
 import { db } from "../../db/client.ts";
 import { eventsTable } from "../../db/schema/events.ts";
 import { outboxEventsTable } from "../../db/schema/outboxEvents.ts";
@@ -39,6 +39,76 @@ export async function getEvents() {
     .from(eventsTable)
     .where(isNull(eventsTable.deletedAt))
     .orderBy(asc(eventsTable.startsAt));
+}
+
+export type EventChatCard = {
+  id: string;
+  name: string;
+  descriptionPreview: string;
+  location: string;
+  startsAt: string;
+  ticketPriceCents: number;
+  currencyCode: string;
+  minPeople: number;
+  maxPeople: number;
+  servesAlcohol: boolean;
+};
+
+/** Load fresh public event details for search hits, preserving search rank. */
+export async function getEventChatCards(
+  rankedIds: string[],
+  { limit, now = new Date() }: { limit: number; now?: Date },
+): Promise<EventChatCard[]> {
+  if (rankedIds.length === 0) return [];
+
+  const rows = await db
+    .select({
+      id: eventsTable.id,
+      name: eventsTable.name,
+      description: eventsTable.description,
+      location: eventsTable.location,
+      startsAt: eventsTable.startsAt,
+      ticketPriceCents: eventsTable.ticketPriceCents,
+      currencyCode: eventsTable.currencyCode,
+      minPeople: eventsTable.minPeople,
+      maxPeople: eventsTable.maxPeople,
+      servesAlcohol: eventsTable.servesAlcohol,
+    })
+    .from(eventsTable)
+    .where(
+      and(
+        inArray(eventsTable.id, rankedIds),
+        isNull(eventsTable.deletedAt),
+        eq(eventsTable.isCancelled, false),
+        gte(eventsTable.startsAt, now),
+      ),
+    );
+
+  const byId = new Map(rows.map((event) => [event.id, event]));
+  return rankedIds.flatMap((id) => {
+    const event = byId.get(id);
+    if (!event) return [];
+
+    const descriptionPreview =
+      event.description.length > 240
+        ? `${event.description.slice(0, 237).trimEnd()}…`
+        : event.description;
+
+    return [
+      {
+        id: event.id,
+        name: event.name,
+        descriptionPreview,
+        location: event.location,
+        startsAt: event.startsAt.toISOString(),
+        ticketPriceCents: event.ticketPriceCents,
+        currencyCode: event.currencyCode.trim(),
+        minPeople: event.minPeople,
+        maxPeople: event.maxPeople,
+        servesAlcohol: event.servesAlcohol,
+      },
+    ];
+  }).slice(0, limit);
 }
 
 export async function createEvent(

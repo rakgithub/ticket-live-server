@@ -16,7 +16,6 @@ async function processOutboxEvent(event: {
   eventType: string;
   aggregateId: string;
   payload: Record<string, unknown>;
-  createdAt: Date;
 }): Promise<void> {
   if (event.eventType === "event.created") {
     await ensureEventsIndex();
