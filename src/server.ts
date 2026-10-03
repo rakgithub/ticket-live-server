@@ -9,6 +9,7 @@ import authRoutes from "./routes/authRoutes.ts";
 import eventsRoutes from "./routes/eventsRoutes.ts";
 import { elasticsearch } from "./search/client.ts";
 import ordersRoutes from "./routes/ordersRoutes.ts";
+import chatRoutes from "./routes/chatRoutes.ts";
 
 const app = express();
 
@@ -34,13 +35,19 @@ app.use("/", authRoutes);
 app.use(requireAuth);
 app.use("/events", eventsRoutes);
 app.use("/orders", ordersRoutes);
+app.use("/chat", chatRoutes);
 
 app.use((_req, res) => {
   res.status(404).json({ error: "Route not found" });
 });
 
-const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
+const errorHandler: ErrorRequestHandler = (error, _req, res, next) => {
   console.error("Request failed", error);
+
+  if (res.headersSent) {
+    next(error);
+    return;
+  }
 
   const status =
     typeof error === "object" && error !== null && "status" in error &&

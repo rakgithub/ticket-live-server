@@ -135,3 +135,43 @@ GET /events/search?q=berlin%20music&limit=20
 The search checks event names, descriptions, and locations. Name matches rank
 highest, cancelled events are excluded, and Elasticsearch returns the remaining
 results by relevance and then by event start time.
+
+## Event discovery chat
+
+The authenticated `POST /chat/events/stream` endpoint accepts a natural-language
+event search and streams Server-Sent Events (SSE) over the same HTTP response.
+It uses LangGraph to extract supported search criteria, searches Elasticsearch,
+rechecks candidate events against PostgreSQL, then streams a short introduction
+from the configured Gemini model. Event cards arrive in a `results` frame before
+the model introduction, so the frontend can render them immediately.
+
+Configure the server-side provider key in `.env` before calling the endpoint:
+
+```env
+GEMINI_API_KEY=your-server-side-key
+EVENT_CHAT_MODEL=gemini-3.8-flash
+```
+
+Example request:
+
+```http
+POST /chat/events/stream
+Authorization: Bearer <access-token>
+Content-Type: application/json
+Accept: text/event-stream
+
+{"message":"Jazz events in Berlin","limit":5}
+```
+
+The stream emits `status`, then `results` (`events` plus `count`), one or more
+`delta` events for the introduction, and a terminal `done` event. Errors after
+the stream starts use an `error` event; validation and configuration errors
+before it starts use JSON responses. Frontends should use `fetch()` and parse
+the response body incrementally, since this endpoint uses POST with a JSON
+body and bearer token.
+
+Chat search only supports text and the existing free-text event location field.
+It does not answer FAQ or live availability questions, and the index remains
+eventually consistent. The chat hydrates Elasticsearch IDs from PostgreSQL to
+exclude events that are no longer active, but it cannot discover new events
+until the outbox worker indexes them.
