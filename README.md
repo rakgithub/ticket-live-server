@@ -166,9 +166,11 @@ Accept: text/event-stream
 The stream emits `status`, then `results` (`events` plus `count`), one or more
 `delta` events for the introduction, and a terminal `done` event. Errors after
 the stream starts use an `error` event; validation and configuration errors
-before it starts use JSON responses. Frontends should use `fetch()` and parse
-the response body incrementally, since this endpoint uses POST with a JSON
-body and bearer token.
+before it starts use JSON responses. A `provider_quota_exhausted` error means
+the configured Gemini project has exhausted its provider quota; wait for its
+reset or increase the project's Gemini quota. Frontends should use `fetch()`
+and parse the response body incrementally, since this endpoint uses POST with
+a JSON body and bearer token.
 
 Chat search only supports text and the existing free-text event location field.
 It does not answer FAQ or live availability questions, and the index remains
