@@ -8,7 +8,24 @@ import {
 import { env } from "../../config/env.ts";
 import { EventSearchUnavailableError } from "../../services/events/eventsSearchService.ts";
 
-type PublicStreamError = "request_timeout" | "search_unavailable" | "chat_failed";
+type PublicStreamError =
+  | "request_timeout"
+  | "search_unavailable"
+  | "provider_quota_exhausted"
+  | "chat_failed";
+
+function getErrorStatus(error: unknown): number | undefined {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "status" in error &&
+    typeof error.status === "number"
+  ) {
+    return error.status;
+  }
+
+  return undefined;
+}
 
 function causedBy(error: unknown, errorName: string): boolean {
   let current: unknown = error;
@@ -220,11 +237,15 @@ export async function streamEventSearch(req: Request, res: Response): Promise<vo
       ? "request_timeout"
       : causedBy(error, EventSearchUnavailableError.name)
         ? "search_unavailable"
+        : getErrorStatus(error) === 429
+          ? "provider_quota_exhausted"
         : "chat_failed";
     console.error("Event chat stream failed", {
       requestId,
       code,
       errorType: error instanceof Error ? error.name : "UnknownError",
+      providerStatus: getErrorStatus(error),
+      errorMessage: error instanceof Error ? error.message : undefined,
     });
     writeSse(res, "error", { requestId, code });
   } finally {
