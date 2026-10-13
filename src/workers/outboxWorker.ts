@@ -6,10 +6,18 @@ import {
   publishOrderConfirmation,
   type OrderConfirmationMessage,
 } from "../messaging/publishOrderConfirmation.ts";
+import { OrderConfirmedV1Schema } from "@ticket-live/contracts";
+import { createLogger } from "../observability/logger.ts";
+import {
+  createMessageTraceContext,
+  runWithTraceContext,
+} from "../observability/traceContext.ts";
+import { startSpan } from "../observability/traceExporter.ts";
 import { elasticsearch } from "../search/client.ts";
 import { ensureEventsIndex, eventsIndexName } from "../search/eventsIndex.ts";
 
 const batchSize = 25;
+const logger = createLogger("ticket-live-outbox-worker");
 
 async function processOutboxEvent(event: {
   id: string;
@@ -17,23 +25,31 @@ async function processOutboxEvent(event: {
   aggregateId: string;
   payload: Record<string, unknown>;
 }): Promise<void> {
+  const { __telemetry, ...payload } = event.payload;
   if (event.eventType === "event.created") {
     await ensureEventsIndex();
     await elasticsearch.index({
       index: eventsIndexName,
       id: event.aggregateId,
-      document: event.payload,
+      document: payload,
     });
     return;
   }
 
   if (event.eventType === "order.confirmed") {
-    await publishOrderConfirmation({
+    await publishOrderConfirmation(OrderConfirmedV1Schema.parse({
       eventId: event.id,
       eventType: "order.confirmed",
+      schemaVersion: 1,
+      aggregateId: event.aggregateId,
       occurredAt: event.createdAt.toISOString(),
-      data: event.payload as OrderConfirmationMessage["data"],
-    });
+      correlationId:
+        typeof __telemetry === "object" && __telemetry !== null && "correlationId" in __telemetry &&
+        typeof __telemetry.correlationId === "string"
+          ? __telemetry.correlationId
+          : event.id,
+      data: payload as OrderConfirmationMessage["data"],
+    }));
     return;
   }
 
@@ -55,8 +71,41 @@ export async function processOutboxBatch(): Promise<number> {
     .limit(batchSize);
 
   for (const event of pendingEvents) {
+    const telemetry = event.payload.__telemetry;
+    const telemetryFields =
+      typeof telemetry === "object" && telemetry !== null
+        ? telemetry as Record<string, unknown>
+        : {};
+    const context = createMessageTraceContext({
+      correlationId:
+        typeof telemetryFields.correlationId === "string"
+          ? telemetryFields.correlationId
+          : event.id,
+      traceparent:
+        typeof telemetryFields.traceparent === "string"
+          ? telemetryFields.traceparent
+          : undefined,
+      tracestate:
+        typeof telemetryFields.tracestate === "string"
+          ? telemetryFields.tracestate
+          : undefined,
+    });
+
     try {
-      await processOutboxEvent(event);
+      await runWithTraceContext(context, async () => {
+        const finishSpan = startSpan(context, "outbox.process", {
+          "messaging.message.id": event.id,
+          "messaging.event.type": event.eventType,
+          "aggregate.id": event.aggregateId,
+        }, "ticket-live-outbox-worker", 1);
+        try {
+          await processOutboxEvent(event);
+          finishSpan("ok");
+        } catch (error) {
+          finishSpan("error");
+          throw error;
+        }
+      });
 
       await db
         .update(outboxEventsTable)
@@ -73,7 +122,15 @@ export async function processOutboxBatch(): Promise<number> {
         })
         .where(eq(outboxEventsTable.id, event.id));
 
-      console.error(`Failed to process outbox event ${event.id}`, error);
+      logger.error("Outbox event processing failed", {
+        messageId: event.id,
+        eventId: event.id,
+        orderId: event.eventType === "order.confirmed" ? event.aggregateId : undefined,
+        correlationId: context.correlationId,
+        eventType: event.eventType,
+        aggregateId: event.aggregateId,
+        errorType: error instanceof Error ? error.name : "UnknownError",
+      });
     }
   }
 
@@ -91,7 +148,9 @@ export function startOutboxWorker(): () => Promise<void> {
     try {
       await processOutboxBatch();
     } catch (error) {
-      console.error("Outbox worker batch failed", error);
+      logger.error("Outbox worker batch failed", {
+        errorType: error instanceof Error ? error.name : "UnknownError",
+      });
     } finally {
       isProcessing = false;
     }

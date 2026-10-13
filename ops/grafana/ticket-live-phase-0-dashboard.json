@@ -1,0 +1,87 @@
+{
+  "id": null,
+  "uid": "ticket-live-phase-0",
+  "title": "Ticket Live · Phase 0",
+  "tags": ["ticket-live", "phase-0"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "HTTP request rate",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "sum by (route, status_class) (rate(http_server_requests_total[5m]))", "legendFormat": "{{route}} {{status_class}}", "refId": "A" }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Checkout p95 latency",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket{route=\"/orders/checkout\"}[10m])))", "legendFormat": "p95", "refId": "A" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Pending outbox rows",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "ticketlive_outbox_pending_total", "legendFormat": "pending", "refId": "A" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Oldest pending outbox row (seconds)",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 8 },
+      "targets": [
+        { "expr": "ticketlive_outbox_oldest_age_seconds", "legendFormat": "age", "refId": "A" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Oldest active inventory hold (seconds)",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "ticketlive_holds_oldest_active_age_seconds", "legendFormat": "hold age", "refId": "A" }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "RabbitMQ dead-letter messages",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 13 },
+      "targets": [
+        { "expr": "ticketlive_rabbitmq_dead_letter_messages", "legendFormat": "dead letters", "refId": "A" }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Notification Kafka consumer lag",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 15 },
+      "targets": [
+        { "expr": "ticketlive_kafka_consumer_lag_messages{consumer_group=\"ticketlive-notification\"}", "legendFormat": "lag", "refId": "A" }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Payment and hold mismatches",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 20 },
+      "targets": [
+        { "expr": "ticketlive_payment_hold_mismatch_total", "legendFormat": "mismatches", "refId": "A" }
+      ]
+    }
+  ],
+  "annotations": { "list": [] },
+  "links": []
+}

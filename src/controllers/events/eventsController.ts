@@ -5,6 +5,9 @@ import {
   getEvents,
 } from "../../services/events/eventsService.ts";
 import { searchEvents } from "../../services/events/eventsSearchService.ts";
+import { createLogger } from "../../observability/logger.ts";
+
+const logger = createLogger("ticket-live-public-api");
 
 const createEventBodySchema = z
   .object({
@@ -70,5 +73,6 @@ export async function postEvent(req: Request, res: Response): Promise<void> {
   }
 
   const event = await createEvent(req.auth.userId, parsedBody.data);
+  logger.info("Event created", { eventId: event.id });
   res.status(201).json({ event });
 }

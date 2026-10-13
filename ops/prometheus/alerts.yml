@@ -1,0 +1,73 @@
+groups:
+  - name: ticket-live-phase-0
+    rules:
+      - alert: TicketLivePublicApiHighServerErrorRate
+        expr: |
+          sum(rate(http_server_requests_total{status_class="5xx"}[5m]))
+          /
+          clamp_min(sum(rate(http_server_requests_total[5m])), 1)
+          > 0.01
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Ticket Live public API server error rate is above 1%
+          description: Check the API logs using correlationId and traceId.
+
+      - alert: TicketLiveCheckoutLatencyHigh
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(http_server_request_duration_seconds_bucket{route="/orders/checkout"}[10m]))
+          ) > 3
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Ticket Live checkout p95 is above 3 seconds
+          description: The current synchronous mock-payment path is included in this latency.
+
+      - alert: TicketLiveOutboxBacklogOld
+        expr: ticketlive_outbox_oldest_age_seconds > 60
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: An unpublished outbox row is older than one minute
+          description: Inspect outbox event IDs, attempts, and last_error before replay.
+
+      - alert: TicketLiveActiveHoldStuck
+        expr: ticketlive_holds_oldest_active_age_seconds > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: An active inventory hold is older than five minutes
+          description: This signal becomes available when the Event-owned hold table is introduced.
+
+      - alert: TicketLiveRabbitDeadLetters
+        expr: ticketlive_rabbitmq_dead_letter_messages > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: RabbitMQ has dead-lettered email jobs
+          description: This signal becomes available after the Email queue and DLQ are configured.
+
+      - alert: TicketLiveNotificationConsumerLag
+        expr: ticketlive_kafka_consumer_lag_messages{consumer_group="ticketlive-notification"} > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Notification is more than 1,000 Kafka messages behind
+          description: This signal becomes available when Kafka is introduced in Phase 4.
+
+      - alert: TicketLivePaymentHoldMismatch
+        expr: ticketlive_payment_hold_mismatch_total > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Payment and inventory hold state disagree
+          description: Reconcile the affected order and hold before reporting checkout success.

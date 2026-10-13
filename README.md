@@ -23,6 +23,21 @@ Requirements: Docker with the Compose plugin, and pnpm.
    docker compose up -d
    ```
 
+   Run the one-time, repeatable database-role bootstrap after PostgreSQL is
+   healthy:
+
+   ```sh
+   docker compose run --rm db-role-bootstrap
+   ```
+
+   This creates empty `identity_service`, `order_service`,
+   `event_service`, `email_service`, and `notification_service` schemas with
+   separate local roles, and a temporary `ticketlive_public_api` runtime login
+   for the current integrated app. Migrations use `MIGRATION_DATABASE_URL`;
+   set the `TICKETLIVE_*_DB_PASSWORD` values in `.env` before using these
+   logins. The public API compatibility login is intentionally able to access
+   all legacy tables until the first ownership cutover.
+
    PostgreSQL is available at `localhost:5433`, Elasticsearch at
    `http://localhost:9200`, and RabbitMQ at `localhost:5672`. RabbitMQ's
    management dashboard is at `http://localhost:15672` (`guest` / `guest`).
@@ -40,6 +55,9 @@ Requirements: Docker with the Compose plugin, and pnpm.
    ```sh
    pnpm start
    ```
+
+   The equivalent workspace entry point is
+   `pnpm --filter @ticket-live/public-api start`.
 
 5. Start the outbox worker in a second terminal:
 
@@ -59,6 +77,12 @@ Requirements: Docker with the Compose plugin, and pnpm.
    It listens on RabbitMQ's `booking-confirmation-email` queue and currently
    records simulated email deliveries in PostgreSQL. It does not send real
    email or generate PDFs yet.
+
+The API exposes `GET /health/live`, `GET /health/ready`, and `GET /metrics`.
+Configure `OTEL_EXPORTER_OTLP_ENDPOINT` to send OTLP traces and metrics to a
+collector. The Phase 0 ownership, contract, and behavior baseline is in
+[`docs/phase-0-baseline.md`](docs/phase-0-baseline.md); current API and message
+schemas are in [`docs/contracts/`](docs/contracts/).
 
 To stop PostgreSQL while keeping its data, run `docker compose down`. To also
 delete the local database volume and all its data, run

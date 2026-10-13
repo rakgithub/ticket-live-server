@@ -1,14 +1,15 @@
 import type { Request, Response } from "express";
-import { z } from "zod";
+import {
+  CheckoutRequestSchema,
+  CheckoutResponseSchema,
+} from "@ticket-live/contracts";
 import { CheckoutError, checkout } from "../../services/orders/checkoutService.ts";
+import { createLogger } from "../../observability/logger.ts";
 
-const checkoutBodySchema = z.object({
-  eventId: z.uuid(),
-  quantity: z.number().int().positive().max(10_000),
-});
+const logger = createLogger("ticket-live-public-api");
 
 export async function postCheckout(req: Request, res: Response): Promise<void> {
-  const parsedBody = checkoutBodySchema.safeParse(req.body);
+  const parsedBody = CheckoutRequestSchema.safeParse(req.body);
   if (!parsedBody.success) {
     res.status(400).json({ error: "Invalid checkout details" });
     return;
@@ -21,9 +22,25 @@ export async function postCheckout(req: Request, res: Response): Promise<void> {
 
   try {
     const checkoutResult = await checkout(req.auth.userId, parsedBody.data);
-    res.status(201).json(checkoutResult);
+    const response = CheckoutResponseSchema.parse({
+      ...checkoutResult,
+      order: {
+        ...checkoutResult.order,
+        createdAt: checkoutResult.order.createdAt.toISOString(),
+      },
+    });
+    logger.info("Checkout confirmed", {
+      orderId: response.order.id,
+      eventId: response.event.id,
+      quantity: response.order.quantity,
+    });
+    res.status(201).json(response);
   } catch (error) {
     if (error instanceof CheckoutError) {
+      logger.warn("Checkout did not complete", {
+        eventId: parsedBody.data.eventId,
+        statusCode: error.status,
+      });
       res.status(error.status).json({ error: error.message });
       return;
     }

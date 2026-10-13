@@ -1,0 +1,25 @@
+{
+  "eventId": "3d05f1b6-15eb-4cc1-b4bd-00e18b936d5f",
+  "eventType": "order.confirmed",
+  "schemaVersion": 1,
+  "aggregateId": "e637ca0a-0b5f-42ce-a070-bfa9c05aaf1a",
+  "occurredAt": "2026-10-13T10:00:00Z",
+  "correlationId": "85ed0f48-269f-4adb-a9f1-80af110f5a19",
+  "data": {
+    "orderId": "e637ca0a-0b5f-42ce-a070-bfa9c05aaf1a",
+    "customer": {
+      "name": "Example Customer",
+      "email": "customer@example.com"
+    },
+    "event": {
+      "id": "1dc646c7-bd99-4bd5-9537-df2c61d23e96",
+      "name": "Example Concert",
+      "location": "Berlin",
+      "startsAt": "2026-11-13T19:00:00Z"
+    },
+    "quantity": 2,
+    "ticketPriceCents": 4000,
+    "totalAmountCents": 8000,
+    "currencyCode": "EUR"
+  }
+}

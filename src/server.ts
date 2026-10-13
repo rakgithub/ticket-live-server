@@ -1,7 +1,6 @@
 import express, { type ErrorRequestHandler } from "express";
 import cors from "cors";
 import helmet from "helmet";
-import morgan from "morgan";
 import { env, corsOrigins } from "./config/env.ts";
 import { pool } from "./db/client.ts";
 import { requireAuth } from "./auth/requireAuth.ts";
@@ -10,6 +9,11 @@ import eventsRoutes from "./routes/eventsRoutes.ts";
 import { elasticsearch } from "./search/client.ts";
 import ordersRoutes from "./routes/ordersRoutes.ts";
 import chatRoutes from "./routes/chatRoutes.ts";
+import healthRoutes from "./routes/healthRoutes.ts";
+import { httpObservabilityMiddleware } from "./observability/httpMiddleware.ts";
+import { createLogger } from "./observability/logger.ts";
+
+const logger = createLogger("ticket-live-public-api");
 
 const app = express();
 
@@ -26,8 +30,9 @@ app.use(
     credentials: true,
   }),
 );
-app.use(morgan(env.NODE_ENV === "production" ? "combined" : "dev"));
+app.use(httpObservabilityMiddleware);
 app.use(express.json({ limit: "100kb" }));
+app.use(healthRoutes);
 
 app.use("/", authRoutes);
 
@@ -42,7 +47,9 @@ app.use((_req, res) => {
 });
 
 const errorHandler: ErrorRequestHandler = (error, _req, res, next) => {
-  console.error("Request failed", error);
+  logger.error("Request failed", {
+    errorType: error instanceof Error ? error.name : "UnknownError",
+  });
 
   if (res.headersSent) {
     next(error);
@@ -63,7 +70,7 @@ const errorHandler: ErrorRequestHandler = (error, _req, res, next) => {
 app.use(errorHandler);
 
 const server = app.listen(env.PORT, () => {
-  console.log(`Listening on port ${env.PORT}`);
+  logger.info("HTTP server listening", { port: env.PORT });
 });
 
 let isShuttingDown = false;
@@ -72,21 +79,27 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
     if (isShuttingDown) return;
     isShuttingDown = true;
-    console.log(`Received ${signal}; shutting down`);
+    logger.info("HTTP server shutting down", { signal });
 
     server.close((error) => {
       if (error && (error as NodeJS.ErrnoException).code !== "ERR_SERVER_NOT_RUNNING") {
-        console.error("HTTP server shutdown failed", error);
+        logger.error("HTTP server shutdown failed", {
+          errorType: error instanceof Error ? error.name : "UnknownError",
+        });
         process.exitCode = 1;
       }
 
       void pool.end().catch((poolError) => {
-        console.error("Database pool shutdown failed", poolError);
+        logger.error("Database pool shutdown failed", {
+          errorType: poolError instanceof Error ? poolError.name : "UnknownError",
+        });
         process.exitCode = 1;
       });
 
       void elasticsearch.close().catch((elasticsearchError) => {
-        console.error("Elasticsearch client shutdown failed", elasticsearchError);
+        logger.error("Elasticsearch client shutdown failed", {
+          errorType: elasticsearchError instanceof Error ? elasticsearchError.name : "UnknownError",
+        });
         process.exitCode = 1;
       });
     });

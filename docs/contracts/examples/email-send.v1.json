@@ -1,0 +1,12 @@
+{
+  "commandId": "97e911ad-0317-4619-a057-f52c99131281",
+  "commandType": "email.send",
+  "schemaVersion": 1,
+  "notificationKey": "order-confirmation:e637ca0a-0b5f-42ce-a070-bfa9c05aaf1a",
+  "templateId": "order-confirmation-v1",
+  "recipient": "customer@example.com",
+  "data": {
+    "orderId": "e637ca0a-0b5f-42ce-a070-bfa9c05aaf1a",
+    "eventName": "Example Concert"
+  }
+}

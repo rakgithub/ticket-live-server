@@ -1,39 +1,20 @@
 import amqp from "amqplib";
-import { z } from "zod";
+import {
+  OrderConfirmedV1Schema,
+  type OrderConfirmedV1,
+} from "@ticket-live/contracts";
 import { env } from "../config/env.ts";
+import { getTraceContext } from "../observability/traceContext.ts";
 
 export const orderConfirmationQueueName = "booking-confirmation-email";
 
-export const orderConfirmationMessageSchema = z.object({
-  eventId: z.uuid(),
-  eventType: z.literal("order.confirmed"),
-  occurredAt: z.iso.datetime(),
-  data: z.object({
-    orderId: z.uuid(),
-    customer: z.object({
-      name: z.string().min(1),
-      email: z.email(),
-    }),
-    event: z.object({
-      id: z.uuid(),
-      name: z.string().min(1),
-      location: z.string().min(1),
-      startsAt: z.iso.datetime(),
-    }),
-    quantity: z.number().int().positive(),
-    ticketPriceCents: z.number().int().nonnegative(),
-    totalAmountCents: z.number().int().nonnegative(),
-    currencyCode: z.string().length(3),
-  }),
-});
-
-export type OrderConfirmationMessage = z.infer<
-  typeof orderConfirmationMessageSchema
->;
+export type OrderConfirmationMessage = OrderConfirmedV1;
 
 export async function publishOrderConfirmation(
   message: OrderConfirmationMessage,
 ): Promise<void> {
+  const validatedMessage = OrderConfirmedV1Schema.parse(message);
+  const traceContext = getTraceContext();
   const connection = await amqp.connect(env.AMQP_URL);
   const channel = await connection.createConfirmChannel();
 
@@ -42,12 +23,17 @@ export async function publishOrderConfirmation(
 
     channel.sendToQueue(
       orderConfirmationQueueName,
-      Buffer.from(JSON.stringify(message)),
+      Buffer.from(JSON.stringify(validatedMessage)),
       {
         persistent: true,
         contentType: "application/json",
-        messageId: message.eventId,
-        type: message.eventType,
+        messageId: validatedMessage.eventId,
+        correlationId: validatedMessage.correlationId,
+        type: "order.confirmed.v1",
+        headers: {
+          ...(traceContext ? { traceparent: traceContext.traceparent } : {}),
+          ...(traceContext?.tracestate ? { tracestate: traceContext.tracestate } : {}),
+        },
       },
     );
 

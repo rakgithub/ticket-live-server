@@ -1,0 +1,8 @@
+{
+  "name": "@ticket-live/email-service",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@ticket-live/contracts": "workspace:*"
+  }
+}

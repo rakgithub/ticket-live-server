@@ -8,6 +8,7 @@ import { outboxEventsTable } from "../../db/schema/outboxEvents.ts";
 import { paymentsTable } from "../../db/schema/payments.ts";
 import { usersTable } from "../../db/schema/users.ts";
 import { mockPaymentProvider } from "../payments/mockPaymentProvider.ts";
+import { withTraceMetadata } from "../../observability/traceContext.ts";
 
 export type CheckoutInput = {
   eventId: string;
@@ -189,7 +190,7 @@ async function confirmPayment(orderId: string, paymentId: string) {
     await tx.insert(outboxEventsTable).values({
       eventType: "order.confirmed",
       aggregateId: order.id,
-      payload: {
+      payload: withTraceMetadata({
         orderId: order.id,
         customer: {
           name: confirmation.customerName,
@@ -205,7 +206,7 @@ async function confirmPayment(orderId: string, paymentId: string) {
         ticketPriceCents: order.ticketPriceCents,
         totalAmountCents: order.totalAmountCents,
         currencyCode: order.currencyCode,
-      },
+      }),
     });
 
     return { order, payment };

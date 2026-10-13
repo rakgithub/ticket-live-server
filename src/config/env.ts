@@ -17,6 +17,12 @@ const envSchema = z.object({
   EVENT_CHAT_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(30_000),
   EVENT_CHAT_MAX_ACTIVE_PER_USER: z.coerce.number().int().min(1).max(10).default(2),
   AMQP_URL: z.string().min(1, "AMQP_URL is required"),
+  OTEL_EXPORTER_OTLP_ENDPOINT: z
+    .string()
+    .optional()
+    .transform((value) => value?.trim() || undefined)
+    .pipe(z.url().optional()),
+  OTEL_EXPORTER_OTLP_HEADERS: z.string().optional(),
   OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().min(100).default(2_000),
   JWT_SECRET: z.string().min(1, "JWT_SECRET is required"),
   ACCESS_TOKEN_TTL: z

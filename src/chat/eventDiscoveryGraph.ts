@@ -8,6 +8,7 @@ import {
 } from "@langchain/langgraph";
 import { z } from "zod";
 import { env } from "../config/env.ts";
+import { createLogger } from "../observability/logger.ts";
 import {
   eventSearchIntentSchema,
   normalizeEventSearchIntent,
@@ -17,6 +18,8 @@ import {
   searchEventCandidates,
   type EventSearchCandidate,
 } from "../services/events/eventsSearchService.ts";
+
+const logger = createLogger("ticket-live-public-api");
 
 function createGeminiClient() {
   if (!env.GEMINI_API_KEY) {
@@ -150,12 +153,8 @@ const nodes = {
       // The cards have already been verified and sent. The introduction is
       // optional, so a provider failure must not turn a successful search into
       // a failed request.
-      console.warn("Event chat summary generation failed; using fallback", {
+      logger.warn("Event chat summary generation failed; using fallback", {
         errorType: error instanceof Error ? error.name : "UnknownError",
-        providerStatus:
-          typeof error === "object" && error !== null && "status" in error
-            ? error.status
-            : undefined,
       });
       return { summary: "Here are the matching upcoming events." };
     }

@@ -2,6 +2,7 @@ import { and, asc, eq, gte, inArray, isNull } from "drizzle-orm";
 import { db } from "../../db/client.ts";
 import { eventsTable } from "../../db/schema/events.ts";
 import { outboxEventsTable } from "../../db/schema/outboxEvents.ts";
+import { withTraceMetadata } from "../../observability/traceContext.ts";
 
 export type CreateEventInput = {
   name: string;
@@ -127,12 +128,12 @@ export async function createEvent(
     await tx.insert(outboxEventsTable).values({
       eventType: "event.created",
       aggregateId: event.id,
-      payload: {
+      payload: withTraceMetadata({
         ...event,
         startsAt: event.startsAt.toISOString(),
         createdAt: event.createdAt.toISOString(),
         updatedAt: event.updatedAt.toISOString(),
-      },
+      }),
     });
 
     return event;

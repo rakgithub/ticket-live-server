@@ -6,7 +6,10 @@ import {
   eventDiscoveryGraph,
 } from "../../chat/eventDiscoveryGraph.ts";
 import { env } from "../../config/env.ts";
+import { createLogger } from "../../observability/logger.ts";
 import { EventSearchUnavailableError } from "../../services/events/eventsSearchService.ts";
+
+const logger = createLogger("ticket-live-public-api");
 
 type PublicStreamError =
   | "request_timeout"
@@ -240,12 +243,11 @@ export async function streamEventSearch(req: Request, res: Response): Promise<vo
         : getErrorStatus(error) === 429
           ? "provider_quota_exhausted"
         : "chat_failed";
-    console.error("Event chat stream failed", {
+    logger.error("Event chat stream failed", {
       requestId,
       code,
       errorType: error instanceof Error ? error.name : "UnknownError",
       providerStatus: getErrorStatus(error),
-      errorMessage: error instanceof Error ? error.message : undefined,
     });
     writeSse(res, "error", { requestId, code });
   } finally {

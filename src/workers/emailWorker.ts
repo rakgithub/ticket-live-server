@@ -3,10 +3,18 @@ import { env } from "../config/env.ts";
 import { db } from "../db/client.ts";
 import { emailDeliveriesTable } from "../db/schema/emailDeliveries.ts";
 import {
-  orderConfirmationMessageSchema,
-  orderConfirmationQueueName,
+  parseOrderConfirmedMessage,
   type OrderConfirmationMessage,
-} from "../messaging/publishOrderConfirmation.ts";
+} from "@ticket-live/contracts";
+import { orderConfirmationQueueName } from "../messaging/publishOrderConfirmation.ts";
+import { createLogger } from "../observability/logger.ts";
+import {
+  createMessageTraceContext,
+  runWithTraceContext,
+} from "../observability/traceContext.ts";
+import { startSpan } from "../observability/traceExporter.ts";
+
+const logger = createLogger("ticket-live-email-worker");
 
 async function recordSimulatedDelivery(
   message: OrderConfirmationMessage,
@@ -35,35 +43,67 @@ export async function startEmailWorker(): Promise<() => Promise<void>> {
   await channel.consume(orderConfirmationQueueName, async (message) => {
     if (!message) return;
 
-    let parsedMessage: OrderConfirmationMessage;
-    try {
-      parsedMessage = orderConfirmationMessageSchema.parse(
-        JSON.parse(message.content.toString()),
-      );
-    } catch (error) {
-      console.error("Discarding invalid email job", error);
-      channel.nack(message, false, false);
-      return;
-    }
+    const headerValue = (name: string): string | undefined => {
+      const value = message.properties.headers?.[name];
+      return typeof value === "string" ? value : undefined;
+    };
+    const context = createMessageTraceContext({
+      correlationId: message.properties.correlationId ?? message.properties.messageId,
+      traceparent: headerValue("traceparent"),
+      tracestate: headerValue("tracestate"),
+    });
 
-    try {
-      const wasRecorded = await recordSimulatedDelivery(parsedMessage);
-
-      if (wasRecorded) {
-        console.log(
-          `Would send order confirmation for ${parsedMessage.data.orderId} to ${parsedMessage.data.customer.email}`,
+    await runWithTraceContext(context, async () => {
+      const finishSpan = startSpan(context, "rabbitmq.consume", {
+        "messaging.system": "rabbitmq",
+        "messaging.destination.name": orderConfirmationQueueName,
+        ...(message.properties.messageId
+          ? { "messaging.message.id": message.properties.messageId }
+          : {}),
+      }, "ticket-live-email-worker", 5);
+      let parsedMessage: OrderConfirmationMessage;
+      try {
+        parsedMessage = parseOrderConfirmedMessage(
+          JSON.parse(message.content.toString()),
         );
-      } else {
-        console.log(
-          `Skipping duplicate order-confirmation job ${parsedMessage.eventId}`,
-        );
+      } catch {
+        finishSpan("error");
+        logger.warn("Discarding invalid order confirmation message", {
+          messageId: message.properties.messageId,
+        });
+        channel.nack(message, false, false);
+        return;
       }
 
-      channel.ack(message);
-    } catch (error) {
-      console.error("Failed to record email job; retrying", error);
-      channel.nack(message, false, true);
-    }
+      try {
+        const wasRecorded = await recordSimulatedDelivery(parsedMessage);
+        if (wasRecorded) {
+          logger.info("Simulated email delivery recorded", {
+            messageId: message.properties.messageId ?? parsedMessage.eventId,
+            eventId: parsedMessage.eventId,
+            orderId: parsedMessage.data.orderId,
+          });
+        } else {
+          logger.info("Duplicate order confirmation skipped", {
+            messageId: message.properties.messageId ?? parsedMessage.eventId,
+            eventId: parsedMessage.eventId,
+            orderId: parsedMessage.data.orderId,
+          });
+        }
+
+        finishSpan("ok", { "order.id": parsedMessage.data.orderId });
+        channel.ack(message);
+      } catch (error) {
+        finishSpan("error", { "order.id": parsedMessage.data.orderId });
+        logger.error("Failed to record email job; message will be retried", {
+          messageId: message.properties.messageId ?? parsedMessage.eventId,
+          eventId: parsedMessage.eventId,
+          orderId: parsedMessage.data.orderId,
+          errorType: error instanceof Error ? error.name : "UnknownError",
+        });
+        channel.nack(message, false, true);
+      }
+    });
   });
 
   return async () => {

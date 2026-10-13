@@ -1,0 +1,323 @@
+openapi: 3.1.0
+info:
+  title: Ticket Live public API
+  version: 1.0.0
+  description: >-
+    Current public behavior recorded before service extraction. Every response
+    includes the x-correlation-id response header; callers may provide that UUID
+    on requests to connect logs and traces.
+servers:
+  - url: http://localhost:4002
+security:
+  - bearerAuth: []
+paths:
+  /health/live:
+    get:
+      operationId: healthLiveness
+      security: []
+      summary: Check whether the API process is running
+      responses:
+        '200':
+          description: Process is live.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, const: ok }
+  /health/ready:
+    get:
+      operationId: healthReadiness
+      security: []
+      summary: Check API database and search dependencies
+      responses:
+        '200':
+          description: PostgreSQL and Elasticsearch are available.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Readiness'
+        '503':
+          description: One or more required dependencies are unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Readiness'
+  /events:
+    get:
+      operationId: listEvents
+      summary: List non-deleted events
+      responses:
+        '200':
+          description: Current event records read from PostgreSQL.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events]
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Event'
+        '401':
+          description: Missing or invalid access token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HttpError'
+    post:
+      operationId: createEvent
+      summary: Create an event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEventRequest'
+      responses:
+        '201':
+          description: Event created and queued for indexing.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [event]
+                properties:
+                  event:
+                    $ref: '#/components/schemas/Event'
+        '400':
+          description: Invalid event details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HttpError'
+        '401':
+          description: Missing or invalid access token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HttpError'
+  /orders/checkout:
+    post:
+      operationId: checkout
+      summary: Create and synchronously confirm a ticket order
+      description: The current mock payment flow returns only after confirmation.
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: false
+          schema:
+            type: string
+          description: Not currently enforced; reserved for the Order extraction.
+        - in: header
+          name: x-correlation-id
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - in: header
+          name: traceparent
+          required: false
+          schema:
+            type: string
+            pattern: '^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutRequest'
+            example:
+              eventId: 1dc646c7-bd99-4bd5-9537-df2c61d23e96
+              quantity: 2
+      responses:
+        '201':
+          description: Order is confirmed and the mock payment succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutResponse'
+        '400':
+          description: Invalid checkout body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HttpError'
+        '401':
+          description: Missing or invalid access token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HttpError'
+        '404':
+          description: Event is missing, deleted, or cancelled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HttpError'
+        '409':
+          description: Capacity is exhausted, payment is declined, or reservation expired.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HttpError'
+  /events/search:
+    get:
+      operationId: searchEvents
+      summary: Search the Elasticsearch event index
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        '200':
+          description: Ranked event documents from the eventually consistent index.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events]
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/EventSearchResult'
+        '401':
+          description: Missing or invalid access token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HttpError'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    CheckoutRequest:
+      type: object
+      required: [eventId, quantity]
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 10000
+    CheckoutResponse:
+      type: object
+      required: [event, order, payment]
+      properties:
+        event:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+        order:
+          type: object
+          required: [id, eventId, quantity, status, ticketPriceCents, currencyCode, totalAmountCents, expiresAt, createdAt]
+          properties:
+            id: { type: string, format: uuid }
+            eventId: { type: string, format: uuid }
+            quantity: { type: integer, minimum: 1 }
+            status: { type: string, const: confirmed }
+            ticketPriceCents: { type: integer, minimum: 0 }
+            currencyCode: { type: string, pattern: '^[A-Z]{3}$' }
+            totalAmountCents: { type: integer, minimum: 0 }
+            expiresAt: { type: 'null' }
+            createdAt: { type: string, format: date-time }
+        payment:
+          type: object
+          required: [id, status, gateway]
+          properties:
+            id: { type: string, format: uuid }
+            status: { type: string, const: succeeded }
+            gateway: { type: string, const: mock }
+    EventSearchResult:
+      type: object
+      required: [id, name, description, location, minPeople, maxPeople, reservedQuantity, ticketPriceCents, currencyCode, servesAlcohol, isCancelled, userId, startsAt, createdAt, updatedAt, score]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        location: { type: string }
+        minPeople: { type: integer }
+        maxPeople: { type: integer }
+        reservedQuantity: { type: integer }
+        startsAt: { type: string, format: date-time }
+        ticketPriceCents: { type: integer, minimum: 0 }
+        currencyCode: { type: string, pattern: '^[A-Z]{3}$' }
+        servesAlcohol: { type: boolean }
+        isCancelled: { type: boolean }
+        userId: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        score: { type: [number, 'null'] }
+    Event:
+      type: object
+      required: [id, name, description, location, minPeople, maxPeople, reservedQuantity, ticketPriceCents, currencyCode, servesAlcohol, isCancelled, userId, startsAt, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        location: { type: string }
+        minPeople: { type: integer }
+        maxPeople: { type: integer }
+        reservedQuantity: { type: integer }
+        ticketPriceCents: { type: integer, minimum: 0 }
+        currencyCode: { type: string, pattern: '^[A-Z]{3}$' }
+        servesAlcohol: { type: boolean }
+        isCancelled: { type: boolean }
+        userId: { type: string, format: uuid }
+        startsAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CreateEventRequest:
+      type: object
+      required: [name, description, location, minPeople, maxPeople, ticketPriceCents, currencyCode, startsAt]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        description: { type: string, minLength: 1 }
+        location: { type: string, minLength: 1, maxLength: 255 }
+        minPeople: { type: integer, minimum: 1 }
+        maxPeople: { type: integer, minimum: 1 }
+        ticketPriceCents: { type: integer, minimum: 0 }
+        currencyCode:
+          type: string
+          pattern: '^[A-Za-z]{3}$'
+          description: Lowercase input is accepted and normalized to uppercase.
+        servesAlcohol: { type: boolean, default: false }
+        startsAt: { type: string, format: date-time }
+    HttpError:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+    Readiness:
+      type: object
+      required: [status, checks]
+      properties:
+        status: { type: string, enum: [ready, not_ready] }
+        checks:
+          type: object
+          required: [postgres, elasticsearch]
+          properties:
+            postgres: { type: boolean }
+            elasticsearch: { type: boolean }

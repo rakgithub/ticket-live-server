@@ -1,17 +1,19 @@
 import { pool } from "../db/client.ts";
 import { elasticsearch } from "../search/client.ts";
+import { createLogger } from "../observability/logger.ts";
 import { startOutboxWorker } from "./outboxWorker.ts";
 
 const stopOutboxWorker = startOutboxWorker();
+const logger = createLogger("ticket-live-outbox-worker");
 
-console.log("Outbox worker started");
+logger.info("Outbox worker started");
 
 let isShuttingDown = false;
 
 async function shutdown(signal: "SIGINT" | "SIGTERM"): Promise<void> {
   if (isShuttingDown) return;
   isShuttingDown = true;
-  console.log(`Received ${signal}; shutting down outbox worker`);
+  logger.info("Outbox worker shutting down", { signal });
 
   await stopOutboxWorker();
 
@@ -22,7 +24,9 @@ async function shutdown(signal: "SIGINT" | "SIGTERM"): Promise<void> {
 
   for (const result of results) {
     if (result.status === "rejected") {
-      console.error("Outbox worker shutdown failed", result.reason);
+      logger.error("Outbox worker shutdown failed", {
+        errorType: result.reason instanceof Error ? result.reason.name : "UnknownError",
+      });
       process.exitCode = 1;
     }
   }
