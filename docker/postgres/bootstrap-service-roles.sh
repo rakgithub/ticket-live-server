@@ -41,6 +41,13 @@ ALTER ROLE ticketlive_order LOGIN PASSWORD :'order_password' NOINHERIT;
 CREATE SCHEMA IF NOT EXISTS order_service AUTHORIZATION ticketlive_order;
 ALTER SCHEMA order_service OWNER TO ticketlive_order;
 SELECT format('ALTER ROLE %I IN DATABASE %I SET search_path = %I', 'ticketlive_order', :'database_name', 'order_service') \gexec
+GRANT USAGE ON SCHEMA order_service TO ticketlive_order, ticketlive_public_api;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA order_service TO ticketlive_order, ticketlive_public_api;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA order_service TO ticketlive_order, ticketlive_public_api;
+SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA order_service GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ticketlive_order, ticketlive_public_api', :'migration_role') \gexec
+SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA order_service GRANT USAGE, SELECT ON SEQUENCES TO ticketlive_order, ticketlive_public_api', :'migration_role') \gexec
+ALTER DEFAULT PRIVILEGES FOR ROLE ticketlive_order IN SCHEMA order_service GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ticketlive_public_api;
+ALTER DEFAULT PRIVILEGES FOR ROLE ticketlive_order IN SCHEMA order_service GRANT USAGE, SELECT ON SEQUENCES TO ticketlive_public_api;
 
 SELECT format('CREATE ROLE %I LOGIN PASSWORD %L NOINHERIT', 'ticketlive_event', :'event_password')
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ticketlive_event') \gexec

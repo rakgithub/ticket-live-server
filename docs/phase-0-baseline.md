@@ -20,11 +20,11 @@ The local PostgreSQL bootstrap creates these schema owners and sets each login's
 | `email_service` | `ticketlive_email` | Email service |
 | `notification_service` | `ticketlive_notification` | Notification service |
 
-Set the `TICKETLIVE_*_DB_PASSWORD` values in `.env` before using these logins. The example values are local development credentials only. The service logins own empty, isolated schemas and have no access to the existing tables in `public`.
+Set the `TICKETLIVE_*_DB_PASSWORD` values in `.env` before using these logins. The example values are local development credentials only. The bootstrap starts service schemas empty; after the Phase 1.1 storage migration, `order_service` contains Order's tables. The remaining service schemas still have no access to the existing tables in `public`.
 
-The temporary `ticketlive_public_api` login uses the legacy `public` schema. It can read and change the current app's tables but cannot create schemas or own tables. It is a compatibility credential, not a service ownership boundary.
+The temporary `ticketlive_public_api` login is a compatibility credential, not a service ownership boundary. It cannot create schemas or own tables. After Phase 1.1 it can access both the legacy `public` tables and Order's tables in `order_service` so the still-integrated app can run.
 
-The current app uses the dedicated `ticketlive_public_api` compatibility login through `DATABASE_URL`. It has DML privileges across the legacy `public` schema because checkout still updates events, orders, and payments in one transaction; it does not own those tables or have schema-creation privileges. `MIGRATION_DATABASE_URL` remains a separate migration/admin credential. Do not replace the compatibility login with a single service login until the corresponding tables and migrations move in their extraction phase. Existing cross-table foreign keys are also left in place during this baseline.
+The current app uses the dedicated `ticketlive_public_api` compatibility login through `DATABASE_URL`. Checkout still updates Event capacity and Order records within the same application transaction, across `public` and `order_service`. `MIGRATION_DATABASE_URL` remains a separate migration/admin credential. The API process and Event inventory boundary will be separated in later Phase 1 work.
 
 ## Data ownership and write inventory
 
@@ -79,3 +79,26 @@ These are starting proposals for the service owners to ratify before a traffic c
 | Email delivery | p95 below 5 minutes after provider delivery status exists |
 
 Do not cut traffic based on these targets until the accountable service owners agree to the values and the later-phase hold, queue, consumer, and delivery metrics are live.
+
+## Phase 1.1 — Order boundary and storage
+
+The first Order storage step moves `orders` and `payments` into the private
+`order_service` schema, removes Order's foreign keys to Event and Identity, and
+copies the event/customer receipt details onto each order. Existing orders are
+backfilled from their current event and user rows during migration; new orders
+capture those details at checkout. Order confirmations now use
+`order_service.outbox_events`; existing `order.confirmed` rows are copied there
+with their IDs and delivery state, while `event.created` rows stay in the
+remaining app's `public.outbox_events` table.
+
+`order_service.checkout_attempts` stores a per-user idempotency key, a hash of
+the checkout body, the order ID, and the final HTTP result. A repeat with the
+same key and body replays that result. The same key with different checkout
+details returns `409`; a concurrent repeat while the first request is still
+running also returns `409` and can be retried with the same key. The checkout
+endpoint now requires `Idempotency-Key`.
+
+This storage step does not extract an independent Order process yet. The current
+API still uses its compatibility database login and still performs the existing
+Event capacity update; the Event-owned inventory interface and Order checkout
+state machine are later steps in Phase 1.

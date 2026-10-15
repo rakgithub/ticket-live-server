@@ -4,7 +4,7 @@ import {
   check,
   index,
   integer,
-  pgTable,
+  pgSchema,
   text,
   timestamp,
   uniqueIndex,
@@ -12,7 +12,9 @@ import {
 } from "drizzle-orm/pg-core";
 import { ordersTable } from "./orders.ts";
 
-export const paymentsTable = pgTable(
+const orderSchema = pgSchema("order_service");
+
+export const paymentsTable = orderSchema.table(
   "payments",
   {
     id: uuid("id").defaultRandom().primaryKey(),

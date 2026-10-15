@@ -32,10 +32,17 @@ healthRoutes.get("/metrics", async (_req, res) => {
   try {
     const result = await pool.query<{ pending: string; oldest_age_seconds: string | null }>(`
       SELECT
-        COUNT(*)::text AS pending,
-        GREATEST(0, EXTRACT(EPOCH FROM (NOW() - MIN(created_at))))::text AS oldest_age_seconds
-      FROM outbox_events
-      WHERE processed_at IS NULL
+        SUM(pending)::text AS pending,
+        GREATEST(0, EXTRACT(EPOCH FROM (NOW() - MIN(oldest_created_at))))::text AS oldest_age_seconds
+      FROM (
+        SELECT COUNT(*) AS pending, MIN(created_at) AS oldest_created_at
+        FROM public.outbox_events
+        WHERE processed_at IS NULL
+        UNION ALL
+        SELECT COUNT(*) AS pending, MIN(created_at) AS oldest_created_at
+        FROM order_service.outbox_events
+        WHERE processed_at IS NULL
+      ) AS pending_outboxes
     `);
     outbox = {
       pending: Number(result.rows[0]?.pending ?? 0),

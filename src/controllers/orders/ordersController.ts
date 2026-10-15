@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import {
+  CheckoutIdempotencyKeySchema,
   CheckoutRequestSchema,
   CheckoutResponseSchema,
 } from "@ticket-live/contracts";
@@ -20,15 +21,21 @@ export async function postCheckout(req: Request, res: Response): Promise<void> {
     return;
   }
 
+  const parsedIdempotencyKey = CheckoutIdempotencyKeySchema.safeParse(
+    req.header("Idempotency-Key"),
+  );
+  if (!parsedIdempotencyKey.success) {
+    res.status(400).json({ error: "A valid Idempotency-Key header is required" });
+    return;
+  }
+
   try {
-    const checkoutResult = await checkout(req.auth.userId, parsedBody.data);
-    const response = CheckoutResponseSchema.parse({
-      ...checkoutResult,
-      order: {
-        ...checkoutResult.order,
-        createdAt: checkoutResult.order.createdAt.toISOString(),
-      },
-    });
+    const checkoutResult = await checkout(
+      req.auth.userId,
+      parsedBody.data,
+      parsedIdempotencyKey.data,
+    );
+    const response = CheckoutResponseSchema.parse(checkoutResult);
     logger.info("Checkout confirmed", {
       orderId: response.order.id,
       eventId: response.event.id,
@@ -37,7 +44,8 @@ export async function postCheckout(req: Request, res: Response): Promise<void> {
     res.status(201).json(response);
   } catch (error) {
     if (error instanceof CheckoutError) {
-      logger.warn("Checkout did not complete", {
+      const logCheckoutError = error.status >= 500 ? logger.error : logger.warn;
+      logCheckoutError("Checkout did not complete", {
         eventId: parsedBody.data.eventId,
         statusCode: error.status,
       });

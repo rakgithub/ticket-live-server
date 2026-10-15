@@ -2,6 +2,7 @@ import { asc, eq, isNull, sql } from "drizzle-orm";
 import { env } from "../config/env.ts";
 import { db } from "../db/client.ts";
 import { outboxEventsTable } from "../db/schema/outboxEvents.ts";
+import { orderOutboxEventsTable } from "../db/schema/orderOutboxEvents.ts";
 import {
   publishOrderConfirmation,
   type OrderConfirmationMessage,
@@ -18,6 +19,15 @@ import { ensureEventsIndex, eventsIndexName } from "../search/eventsIndex.ts";
 
 const batchSize = 25;
 const logger = createLogger("ticket-live-outbox-worker");
+
+type PendingOutboxEvent = {
+  source: "event" | "order";
+  id: string;
+  eventType: string;
+  aggregateId: string;
+  payload: Record<string, unknown>;
+  createdAt: Date;
+};
 
 async function processOutboxEvent(event: {
   id: string;
@@ -57,18 +67,38 @@ async function processOutboxEvent(event: {
 }
 
 export async function processOutboxBatch(): Promise<number> {
-  const pendingEvents = await db
-    .select({
-      id: outboxEventsTable.id,
-      eventType: outboxEventsTable.eventType,
-      aggregateId: outboxEventsTable.aggregateId,
-      payload: outboxEventsTable.payload,
-      createdAt: outboxEventsTable.createdAt,
-    })
-    .from(outboxEventsTable)
-    .where(isNull(outboxEventsTable.processedAt))
-    .orderBy(asc(outboxEventsTable.createdAt))
-    .limit(batchSize);
+  const [eventOutboxRows, orderOutboxRows] = await Promise.all([
+    db
+      .select({
+        id: outboxEventsTable.id,
+        eventType: outboxEventsTable.eventType,
+        aggregateId: outboxEventsTable.aggregateId,
+        payload: outboxEventsTable.payload,
+        createdAt: outboxEventsTable.createdAt,
+      })
+      .from(outboxEventsTable)
+      .where(isNull(outboxEventsTable.processedAt))
+      .orderBy(asc(outboxEventsTable.createdAt))
+      .limit(batchSize),
+    db
+      .select({
+        id: orderOutboxEventsTable.id,
+        eventType: orderOutboxEventsTable.eventType,
+        aggregateId: orderOutboxEventsTable.aggregateId,
+        payload: orderOutboxEventsTable.payload,
+        createdAt: orderOutboxEventsTable.createdAt,
+      })
+      .from(orderOutboxEventsTable)
+      .where(isNull(orderOutboxEventsTable.processedAt))
+      .orderBy(asc(orderOutboxEventsTable.createdAt))
+      .limit(batchSize),
+  ]);
+  const pendingEvents: PendingOutboxEvent[] = [
+    ...eventOutboxRows.map((event) => ({ ...event, source: "event" as const })),
+    ...orderOutboxRows.map((event) => ({ ...event, source: "order" as const })),
+  ]
+    .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
+    .slice(0, batchSize);
 
   for (const event of pendingEvents) {
     const telemetry = event.payload.__telemetry;
@@ -107,20 +137,37 @@ export async function processOutboxBatch(): Promise<number> {
         }
       });
 
-      await db
-        .update(outboxEventsTable)
-        .set({ processedAt: new Date(), lastError: null })
-        .where(eq(outboxEventsTable.id, event.id));
+      if (event.source === "order") {
+        await db
+          .update(orderOutboxEventsTable)
+          .set({ processedAt: new Date(), lastError: null })
+          .where(eq(orderOutboxEventsTable.id, event.id));
+      } else {
+        await db
+          .update(outboxEventsTable)
+          .set({ processedAt: new Date(), lastError: null })
+          .where(eq(outboxEventsTable.id, event.id));
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
 
-      await db
-        .update(outboxEventsTable)
-        .set({
-          attempts: sql`${outboxEventsTable.attempts} + 1`,
-          lastError: message.slice(0, 2_000),
-        })
-        .where(eq(outboxEventsTable.id, event.id));
+      if (event.source === "order") {
+        await db
+          .update(orderOutboxEventsTable)
+          .set({
+            attempts: sql`${orderOutboxEventsTable.attempts} + 1`,
+            lastError: message.slice(0, 2_000),
+          })
+          .where(eq(orderOutboxEventsTable.id, event.id));
+      } else {
+        await db
+          .update(outboxEventsTable)
+          .set({
+            attempts: sql`${outboxEventsTable.attempts} + 1`,
+            lastError: message.slice(0, 2_000),
+          })
+          .where(eq(outboxEventsTable.id, event.id));
+      }
 
       logger.error("Outbox event processing failed", {
         messageId: event.id,

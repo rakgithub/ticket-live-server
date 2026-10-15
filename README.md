@@ -30,10 +30,11 @@ Requirements: Docker with the Compose plugin, and pnpm.
    docker compose run --rm db-role-bootstrap
    ```
 
-   This creates empty `identity_service`, `order_service`,
-   `event_service`, `email_service`, and `notification_service` schemas with
-   separate local roles, and a temporary `ticketlive_public_api` runtime login
-   for the current integrated app. Migrations use `MIGRATION_DATABASE_URL`;
+   This creates `identity_service`, `order_service`, `event_service`,
+   `email_service`, and `notification_service` schemas with separate local
+   roles, and a temporary `ticketlive_public_api` runtime login for the current
+   integrated app. The Order storage migration fills `order_service`; the other
+   service schemas remain empty for now. Migrations use `MIGRATION_DATABASE_URL`;
    set the `TICKETLIVE_*_DB_PASSWORD` values in `.env` before using these
    logins. The public API compatibility login is intentionally able to access
    all legacy tables until the first ownership cutover.
@@ -109,14 +110,15 @@ the event ID and a JSON snapshot for indexing. If either insert fails,
 PostgreSQL rolls back both inserts.
 
 After a checkout payment succeeds, the order, payment, and `order.confirmed`
-outbox row are committed in one PostgreSQL transaction. The API can then return
+row in `order_service.outbox_events` are committed in one PostgreSQL
+transaction. The API can then return
 the confirmed order without waiting for RabbitMQ or background email handling.
 
 Inspect pending outbox rows with:
 
 ```sh
 docker compose exec postgres psql -U user -d ticket_live \
-  -c "SELECT id, event_type, aggregate_id, payload, created_at FROM outbox_events WHERE processed_at IS NULL ORDER BY created_at;"
+  -c "SELECT id, event_type, aggregate_id, payload, created_at FROM public.outbox_events WHERE processed_at IS NULL UNION ALL SELECT id, event_type, aggregate_id, payload, created_at FROM order_service.outbox_events WHERE processed_at IS NULL ORDER BY created_at;"
 ```
 
 Rows remain pending until the separately started background worker processes
@@ -125,9 +127,16 @@ them. It polls every two seconds and routes each event by type:
 - `event.created` is indexed directly in Elasticsearch.
 - `order.confirmed` is published to RabbitMQ for the email worker.
 
-The worker marks an outbox row processed after its destination accepts the
-event. Failed rows remain pending and include the failed attempt count and
-error message.
+The worker reads event-indexing messages from `public.outbox_events` and order
+messages from `order_service.outbox_events`. It marks a row processed after its
+destination accepts the event. Failed rows remain pending and include the
+failed attempt count and error message.
+
+Checkout now requires an `Idempotency-Key` header. If a client retries the
+same checkout body with the same key after the first request finishes, the API
+returns the saved result instead of creating another order. A concurrent retry
+while the first is still processing, or the same key with different checkout
+details, gets `409 Conflict`.
 
 The worker creates an Elasticsearch `events` index on first use. Elasticsearch
 uses the PostgreSQL event ID as its document ID, so retrying the same outbox row

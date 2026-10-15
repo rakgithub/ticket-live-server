@@ -38,12 +38,14 @@ if (confirmation !== "DELETE ALL DATA") {
 
     // Delete dependent rows before their parents. Do not use CASCADE: users must remain untouched.
     const tables = [
-      "payments",
+      "order_service.checkout_attempts",
+      "order_service.payments",
       "email_deliveries",
-      "orders",
+      "order_service.outbox_events",
+      "order_service.orders",
       "events",
       "revoked_access_tokens",
-      "outbox_events",
+      "public.outbox_events",
     ];
 
     for (const table of tables) {

@@ -5,6 +5,8 @@ export const CheckoutRequestSchema = z.object({
   quantity: z.number().int().positive().max(10_000),
 });
 
+export const CheckoutIdempotencyKeySchema = z.string().trim().min(1).max(255);
+
 /** Current POST /orders/checkout 201 response; keep aligned with the public API. */
 export const CheckoutResponseSchema = z.object({
   event: z.object({
@@ -32,4 +34,5 @@ export const CheckoutResponseSchema = z.object({
 export const HttpErrorSchema = z.object({ error: z.string().min(1) });
 
 export type CheckoutRequest = z.infer<typeof CheckoutRequestSchema>;
+export type CheckoutIdempotencyKey = z.infer<typeof CheckoutIdempotencyKeySchema>;
 export type CheckoutResponse = z.infer<typeof CheckoutResponseSchema>;

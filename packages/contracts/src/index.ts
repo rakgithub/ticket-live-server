@@ -1,8 +1,10 @@
 export {
   CheckoutRequestSchema,
+  CheckoutIdempotencyKeySchema,
   CheckoutResponseSchema,
   HttpErrorSchema,
   type CheckoutRequest,
+  type CheckoutIdempotencyKey,
   type CheckoutResponse,
 } from "./http.ts";
 export {

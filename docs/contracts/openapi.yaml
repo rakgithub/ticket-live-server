@@ -107,10 +107,12 @@ paths:
       parameters:
         - in: header
           name: Idempotency-Key
-          required: false
+          required: true
           schema:
             type: string
-          description: Not currently enforced; reserved for the Order extraction.
+            minLength: 1
+            maxLength: 255
+          description: Reusing the key with the same body after completion returns the original result. A concurrent retry while processing, or reuse with a different body, returns 409.
         - in: header
           name: x-correlation-id
           required: false
@@ -140,7 +142,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CheckoutResponse'
         '400':
-          description: Invalid checkout body.
+          description: Invalid checkout body or missing/invalid Idempotency-Key header.
           content:
             application/json:
               schema:
@@ -158,7 +160,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/HttpError'
         '409':
-          description: Capacity is exhausted, payment is declined, or reservation expired.
+          description: Capacity is exhausted, payment is declined, reservation expired, or the idempotency key was reused with a different request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HttpError'
+        '500':
+          description: Checkout failed unexpectedly. Retrying with the same Idempotency-Key returns the saved error response.
           content:
             application/json:
               schema:
