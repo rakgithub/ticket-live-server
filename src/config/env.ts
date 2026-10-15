@@ -37,6 +37,7 @@ const envSchema = z.object({
       "INTERNAL_SERVICE_TOKEN must be at least 32 printable ASCII bytes",
     )
     .optional(),
+  INVENTORY_SERVICE_URL: z.url().default("http://localhost:4002"),
   ACCESS_TOKEN_TTL: z
     .string()
     .regex(/^\d+[smhd]$/, "ACCESS_TOKEN_TTL must look like 15m, 1h, or 1d")

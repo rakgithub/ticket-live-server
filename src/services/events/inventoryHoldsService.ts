@@ -13,6 +13,8 @@ const holdSelection = {
   holdId: inventoryHoldsTable.holdId,
   orderId: inventoryHoldsTable.orderId,
   eventId: inventoryHoldsTable.eventId,
+  eventNameSnapshot: inventoryHoldsTable.eventNameSnapshot,
+  eventLocationSnapshot: inventoryHoldsTable.eventLocationSnapshot,
   quantity: inventoryHoldsTable.quantity,
   unitPriceCents: inventoryHoldsTable.unitPriceCents,
   currencyCode: inventoryHoldsTable.currencyCode,
@@ -87,6 +89,8 @@ export async function createInventoryHold(input: CreateHoldInput) {
       const [event] = await tx
         .select({
           id: eventsTable.id,
+          name: eventsTable.name,
+          location: eventsTable.location,
           maxPeople: eventsTable.maxPeople,
           reservedQuantity: eventsTable.reservedQuantity,
           ticketPriceCents: eventsTable.ticketPriceCents,
@@ -150,6 +154,8 @@ export async function createInventoryHold(input: CreateHoldInput) {
           holdId: input.orderId,
           orderId: input.orderId,
           eventId: event.id,
+          eventNameSnapshot: event.name,
+          eventLocationSnapshot: event.location,
           quantity: input.quantity,
           unitPriceCents: event.ticketPriceCents,
           currencyCode: event.currencyCode,

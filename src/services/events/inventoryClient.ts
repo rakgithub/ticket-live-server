@@ -7,6 +7,7 @@ import {
   type InventoryHoldResponse,
 } from "@ticket-live/contracts";
 import { z } from "zod";
+import { env } from "../../config/env.ts";
 import { getTraceContext } from "../../observability/traceContext.ts";
 
 const MAX_RETRIES = 2;
@@ -165,6 +166,23 @@ export class InventoryClient {
       503,
     );
   }
+}
+
+let configuredClient: InventoryClient | undefined;
+
+export function getInventoryClient(): InventoryClient {
+  if (configuredClient) return configuredClient;
+  if (!env.INTERNAL_SERVICE_TOKEN) {
+    throw new InventoryServiceError(
+      "Inventory service authentication is not configured",
+      503,
+    );
+  }
+  configuredClient = new InventoryClient({
+    baseUrl: env.INVENTORY_SERVICE_URL,
+    serviceToken: env.INTERNAL_SERVICE_TOKEN,
+  });
+  return configuredClient;
 }
 
 function isRetryableStatus(status: number): boolean {

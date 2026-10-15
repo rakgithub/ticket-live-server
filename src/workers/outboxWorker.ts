@@ -16,6 +16,9 @@ import {
 import { startSpan } from "../observability/traceExporter.ts";
 import { elasticsearch } from "../search/client.ts";
 import { ensureEventsIndex, eventsIndexName } from "../search/eventsIndex.ts";
+import { expirePendingReservations } from "../services/orders/expireReservationsService.ts";
+import { reconcileCheckoutState } from "../services/orders/checkoutService.ts";
+import { releaseInventoryHoldCommand } from "../services/orders/releaseInventoryHold.ts";
 
 const batchSize = 25;
 const logger = createLogger("ticket-live-outbox-worker");
@@ -64,10 +67,28 @@ async function processOutboxEvent(event: {
     return;
   }
 
+  if (event.eventType === "inventory.hold.release") {
+    const holdId = payload.holdId;
+    if (typeof holdId !== "string") {
+      throw new Error("Inventory hold release command has no hold ID");
+    }
+    await releaseInventoryHoldCommand(holdId);
+    return;
+  }
+
   throw new Error(`Unsupported outbox event type: ${event.eventType}`);
 }
 
 export async function processOutboxBatch(): Promise<number> {
+  try {
+    await expirePendingReservations();
+    await reconcileCheckoutState();
+  } catch (error) {
+    logger.error("Order maintenance pass failed", {
+      errorType: error instanceof Error ? error.name : "UnknownError",
+    });
+  }
+
   const [eventOutboxRows, orderOutboxRows] = await Promise.all([
     db
       .select({

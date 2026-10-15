@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
   check,
-  foreignKey,
   index,
   integer,
   jsonb,
@@ -11,7 +10,6 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { ordersTable } from "./orders.ts";
 
 const orderSchema = pgSchema("order_service");
 
@@ -23,6 +21,7 @@ export const checkoutAttemptsTable = orderSchema.table(
     userId: uuid("user_id").notNull(),
     idempotencyKey: text("idempotency_key").notNull(),
     requestHash: text("request_hash").notNull(),
+    // Preallocated before Event creates a hold, so it intentionally has no FK.
     orderId: uuid("order_id"),
     state: text("state").notNull().default("in_progress"),
     responseStatus: integer("response_status"),
@@ -61,11 +60,6 @@ export const checkoutAttemptsTable = orderSchema.table(
       "checkout_attempts_response_status_valid",
       sql`${table.responseStatus} IS NULL OR ${table.responseStatus} BETWEEN 200 AND 599`,
     ),
-    foreignKey({
-      name: "checkout_attempts_order_id_orders_id_fkey",
-      columns: [table.orderId],
-      foreignColumns: [ordersTable.id],
-    }),
   ],
 );
 

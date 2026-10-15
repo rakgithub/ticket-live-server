@@ -28,6 +28,8 @@ export const inventoryHoldsTable = pgTable(
     eventId: uuid("event_id")
       .notNull()
       .references(() => eventsTable.id),
+    eventNameSnapshot: text("event_name_snapshot").notNull(),
+    eventLocationSnapshot: text("event_location_snapshot").notNull(),
     quantity: integer("quantity").notNull(),
     unitPriceCents: integer("unit_price_cents").notNull(),
     currencyCode: char("currency_code", { length: 3 }).notNull(),

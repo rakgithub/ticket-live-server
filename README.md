@@ -101,6 +101,8 @@ bytes (the `.env.example` value is a placeholder) and give it only to trusted
 service callers; production startup requires it. The internal API is not for
 browser clients. Active holds expire every two seconds by default;
 `INVENTORY_HOLD_EXPIRY_POLL_INTERVAL_MS` adjusts that polling interval.
+Order calls the temporary Event inventory API at `INVENTORY_SERVICE_URL`,
+which defaults to `http://localhost:4002` for the integrated local app.
 
 To stop PostgreSQL while keeping its data, run `docker compose down`. To also
 delete the local database volume and all its data, run
@@ -154,6 +156,16 @@ same checkout body with the same key after the first request finishes, the API
 returns the saved result instead of creating another order. A concurrent retry
 while the first is still processing, or the same key with different checkout
 details, gets `409 Conflict`.
+
+Checkout creates one stable Order ID before requesting its Event hold. Order
+persists the hold's event and price snapshots, then calls the mock payment
+adapter outside the database transaction. A successful payment is recorded
+before Order asks Event to confirm the hold; only a confirmed hold can produce
+the `order.confirmed` outbox message. Payment failures and expired pending
+orders persist `inventory.hold.release` commands in the Order outbox. The
+outbox worker retries those commands and reconciles stale checkout attempts.
+If a checkout returns `503` while Event is unavailable or the outcome is
+uncertain, retry with the same key so reconciliation can continue safely.
 
 The worker creates an Elasticsearch `events` index on first use. Elasticsearch
 uses the PostgreSQL event ID as its document ID, so retrying the same outbox row

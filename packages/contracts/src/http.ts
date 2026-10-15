@@ -25,6 +25,8 @@ export const InventoryHoldSchema = z.object({
   holdId: z.uuid(),
   orderId: z.uuid(),
   eventId: z.uuid(),
+  eventNameSnapshot: z.string().min(1),
+  eventLocationSnapshot: z.string(),
   quantity: z.number().int().positive(),
   unitPriceCents: z.number().int().nonnegative(),
   currencyCode: z.string().regex(/^[A-Z]{3}$/),

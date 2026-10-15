@@ -167,7 +167,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/HttpError'
         '500':
-          description: Checkout failed unexpectedly. Retrying with the same Idempotency-Key returns the saved error response.
+          description: Checkout failed before its outcome could be persisted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HttpError'
+        '503':
+          description: The Event response or checkout outcome is uncertain. Retry with the same Idempotency-Key while Order reconciles the hold and payment state.
           content:
             application/json:
               schema:
@@ -475,11 +481,13 @@ components:
         quantity: { type: integer, minimum: 1, maximum: 10000 }
     InventoryHold:
       type: object
-      required: [holdId, orderId, eventId, quantity, unitPriceCents, currencyCode, eventStartsAtSnapshot, state, expiresAt, createdAt, updatedAt]
+      required: [holdId, orderId, eventId, eventNameSnapshot, eventLocationSnapshot, quantity, unitPriceCents, currencyCode, eventStartsAtSnapshot, state, expiresAt, createdAt, updatedAt]
       properties:
         holdId: { type: string, format: uuid }
         orderId: { type: string, format: uuid }
         eventId: { type: string, format: uuid }
+        eventNameSnapshot: { type: string, minLength: 1 }
+        eventLocationSnapshot: { type: string }
         quantity: { type: integer, minimum: 1 }
         unitPriceCents: { type: integer, minimum: 0 }
         currencyCode: { type: string, pattern: '^[A-Z]{3}$' }
