@@ -5,7 +5,8 @@ info:
   description: >-
     Current public behavior recorded before service extraction. Every response
     includes the x-correlation-id response header; callers may provide that UUID
-    on requests to connect logs and traces.
+    on requests to connect logs and traces. The /internal paths are service-only
+    interfaces and must not be exposed to browsers.
 servers:
   - url: http://localhost:4002
 security:
@@ -210,12 +211,217 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HttpError'
+  /internal/events/{eventId}/holds:
+    post:
+      operationId: createInventoryHold
+      security:
+        - serviceBearerAuth: []
+      summary: Create or retrieve an idempotent event inventory hold
+      description: The orderId is the stable idempotency key and equals the returned holdId, so callers can use it to query after a lost response. Existing holds can be retrieved after event cancellation; new holds are rejected.
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: Idempotency-Key
+          required: true
+          description: Must equal the orderId in the request body and be reused for every retry.
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InventoryHoldCreateRequest'
+      responses:
+        '201':
+          description: A new hold was created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InventoryHoldResponse' }
+        '200':
+          description: The matching hold already existed; this response is safe for a retry.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InventoryHoldResponse' }
+        '400':
+          description: Invalid request or idempotency key.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+        '401':
+          description: Missing or invalid service credentials.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+        '404':
+          description: Event is missing, deleted, or cancelled.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+        '409':
+          description: Capacity is exhausted or the orderId was reused for different hold details.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+        '500':
+          description: Inventory operation failed unexpectedly.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+        '503':
+          description: Internal service authentication is not configured.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+  /internal/holds/{holdId}/confirm:
+    post:
+      operationId: confirmInventoryHold
+      security:
+        - serviceBearerAuth: []
+      summary: Confirm a held inventory reservation
+      parameters:
+        - in: path
+          name: holdId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Hold was confirmed or was already confirmed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InventoryHoldResponse' }
+        '400':
+          description: Invalid hold ID.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+        '401':
+          description: Missing or invalid service credentials.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+        '404':
+          description: Hold does not exist.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+        '409':
+          description: Hold expired, was released, or cannot be confirmed in its current state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+        '500':
+          description: Inventory operation failed unexpectedly.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+        '503':
+          description: Internal service authentication is not configured.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+  /internal/holds/{holdId}/release:
+    post:
+      operationId: releaseInventoryHold
+      security:
+        - serviceBearerAuth: []
+      summary: Release an active inventory reservation
+      parameters:
+        - in: path
+          name: holdId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Hold was released or was already released or expired.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InventoryHoldResponse' }
+        '400':
+          description: Invalid hold ID.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+        '401':
+          description: Missing or invalid service credentials.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+        '404':
+          description: Hold does not exist.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+        '409':
+          description: A confirmed hold cannot be released.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+        '500':
+          description: Inventory operation failed unexpectedly.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+        '503':
+          description: Internal service authentication is not configured.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+  /internal/holds/{holdId}:
+    get:
+      operationId: getInventoryHold
+      security:
+        - serviceBearerAuth: []
+      summary: Get an inventory hold and its current state
+      description: holdId equals the orderId supplied when the hold was created.
+      parameters:
+        - in: path
+          name: holdId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Current inventory hold state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InventoryHoldResponse' }
+        '400':
+          description: Invalid hold ID.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+        '401':
+          description: Missing or invalid service credentials.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+        '404':
+          description: Hold does not exist.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+        '500':
+          description: Inventory operation failed unexpectedly.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+        '503':
+          description: Internal service authentication is not configured.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    serviceBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque service token
   schemas:
     CheckoutRequest:
       type: object
@@ -258,6 +464,36 @@ components:
             id: { type: string, format: uuid }
             status: { type: string, const: succeeded }
             gateway: { type: string, const: mock }
+    InventoryHoldCreateRequest:
+      type: object
+      required: [orderId, quantity]
+      properties:
+        orderId:
+          type: string
+          format: uuid
+          description: Stable idempotency key; send the same value in Idempotency-Key on every retry.
+        quantity: { type: integer, minimum: 1, maximum: 10000 }
+    InventoryHold:
+      type: object
+      required: [holdId, orderId, eventId, quantity, unitPriceCents, currencyCode, eventStartsAtSnapshot, state, expiresAt, createdAt, updatedAt]
+      properties:
+        holdId: { type: string, format: uuid }
+        orderId: { type: string, format: uuid }
+        eventId: { type: string, format: uuid }
+        quantity: { type: integer, minimum: 1 }
+        unitPriceCents: { type: integer, minimum: 0 }
+        currencyCode: { type: string, pattern: '^[A-Z]{3}$' }
+        eventStartsAtSnapshot: { type: string, format: date-time }
+        state: { type: string, enum: [active, confirmed, released, expired] }
+        expiresAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    InventoryHoldResponse:
+      type: object
+      required: [hold]
+      properties:
+        hold:
+          $ref: '#/components/schemas/InventoryHold'
     EventSearchResult:
       type: object
       required: [id, name, description, location, minPeople, maxPeople, reservedQuantity, ticketPriceCents, currencyCode, servesAlcohol, isCancelled, userId, startsAt, createdAt, updatedAt, score]

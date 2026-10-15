@@ -85,6 +85,13 @@ collector. The Phase 0 ownership, contract, and behavior baseline is in
 [`docs/phase-0-baseline.md`](docs/phase-0-baseline.md); current API and message
 schemas are in [`docs/contracts/`](docs/contracts/).
 
+The service-only inventory endpoints under `/internal` use
+`INTERNAL_SERVICE_TOKEN`. Set it in `.env` to a random value of at least 32
+bytes (the `.env.example` value is a placeholder) and give it only to trusted
+service callers; production startup requires it. The internal API is not for
+browser clients. Active holds expire every two seconds by default;
+`INVENTORY_HOLD_EXPIRY_POLL_INTERVAL_MS` adjusts that polling interval.
+
 To stop PostgreSQL while keeping its data, run `docker compose down`. To also
 delete the local database volume and all its data, run
 `docker compose down -v`.

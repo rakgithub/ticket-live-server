@@ -24,7 +24,19 @@ const envSchema = z.object({
     .pipe(z.url().optional()),
   OTEL_EXPORTER_OTLP_HEADERS: z.string().optional(),
   OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().min(100).default(2_000),
+  INVENTORY_HOLD_EXPIRY_POLL_INTERVAL_MS: z.coerce
+    .number()
+    .int()
+    .min(100)
+    .default(2_000),
   JWT_SECRET: z.string().min(1, "JWT_SECRET is required"),
+  INTERNAL_SERVICE_TOKEN: z
+    .string()
+    .regex(
+      /^[\x21-\x7E]{32,}$/,
+      "INTERNAL_SERVICE_TOKEN must be at least 32 printable ASCII bytes",
+    )
+    .optional(),
   ACCESS_TOKEN_TTL: z
     .string()
     .regex(/^\d+[smhd]$/, "ACCESS_TOKEN_TTL must look like 15m, 1h, or 1d")
@@ -46,6 +58,13 @@ const envSchema = z.object({
       code: "custom",
       path: ["CORS_ORIGINS"],
       message: "CORS_ORIGINS must be configured in production",
+    });
+  }
+  if (values.NODE_ENV === "production" && !values.INTERNAL_SERVICE_TOKEN) {
+    context.addIssue({
+      code: "custom",
+      path: ["INTERNAL_SERVICE_TOKEN"],
+      message: "INTERNAL_SERVICE_TOKEN must be configured in production",
     });
   }
 });
