@@ -4,7 +4,7 @@ import { db } from "../db/client.ts";
 import { emailDeliveriesTable } from "../db/schema/emailDeliveries.ts";
 import {
   parseOrderConfirmedMessage,
-  type OrderConfirmationMessage,
+  type OrderConfirmedV1,
 } from "@ticket-live/contracts";
 import { orderConfirmationQueueName } from "../messaging/publishOrderConfirmation.ts";
 import { createLogger } from "../observability/logger.ts";
@@ -17,7 +17,7 @@ import { startSpan } from "../observability/traceExporter.ts";
 const logger = createLogger("ticket-live-email-worker");
 
 async function recordSimulatedDelivery(
-  message: OrderConfirmationMessage,
+  message: OrderConfirmedV1,
 ): Promise<boolean> {
   const [delivery] = await db
     .insert(emailDeliveriesTable)
@@ -61,7 +61,7 @@ export async function startEmailWorker(): Promise<() => Promise<void>> {
           ? { "messaging.message.id": message.properties.messageId }
           : {}),
       }, "ticket-live-email-worker", 5);
-      let parsedMessage: OrderConfirmationMessage;
+      let parsedMessage: OrderConfirmedV1;
       try {
         parsedMessage = parseOrderConfirmedMessage(
           JSON.parse(message.content.toString()),

@@ -34,8 +34,9 @@
 
 - Install dependencies: `pnpm install`. Local infrastructure and startup steps are in `README.md`.
 - API: `pnpm start`; outbox worker: `pnpm start:worker`; email worker: `pnpm start:email-worker`.
+- Quality checks: `pnpm lint`, `pnpm typecheck`, and `pnpm test`.
 - Database migrations: `pnpm exec drizzle-kit migrate` after reviewing the generated SQL and confirming the target database.
-- There is no configured test suite: `pnpm test` is a placeholder that exits with an error. Verify focused changes with appropriate checks and report what ran and what could not be checked.
+- Verify focused changes with appropriate checks and report what ran and what could not be checked.
 
 ## Finish
 

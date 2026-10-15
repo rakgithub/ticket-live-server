@@ -91,7 +91,7 @@ export async function searchEventCandidates(
     });
 
     return response.hits.hits.flatMap((hit) =>
-      hit._id ? [{ id: hit._id, score: hit._score }] : [],
+      hit._id ? [{ id: hit._id, score: hit._score ?? null }] : [],
     );
   } catch (error) {
     throw new EventSearchUnavailableError(error);

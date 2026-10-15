@@ -13,7 +13,7 @@ healthRoutes.get("/health/live", (_req, res) => {
 healthRoutes.get("/health/ready", async (_req, res) => {
   const [postgres, elasticsearchStatus] = await Promise.allSettled([
     pool.query("SELECT 1"),
-    elasticsearch.ping({ requestTimeout: 1_000 }),
+    elasticsearch.ping({}, { requestTimeout: 1_000 }),
   ]);
   const checks = {
     postgres: postgres.status === "fulfilled",

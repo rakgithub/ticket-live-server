@@ -34,6 +34,7 @@ async function processOutboxEvent(event: {
   eventType: string;
   aggregateId: string;
   payload: Record<string, unknown>;
+  createdAt: Date;
 }): Promise<void> {
   const { __telemetry, ...payload } = event.payload;
   if (event.eventType === "event.created") {
