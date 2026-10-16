@@ -2,7 +2,7 @@ import "dotenv/config";
 import { z } from "zod";
 
 const envSchema = z.object({
-  TICKETLIVE_SERVICE: z.enum(["public-api", "event", "email"]).default("public-api"),
+  TICKETLIVE_SERVICE: z.enum(["public-api", "order", "event", "email"]).default("public-api"),
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
@@ -11,6 +11,7 @@ const envSchema = z.object({
   EMAIL_SERVICE_PORT: z.coerce.number().int().min(1).max(65_535).default(4004),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
   DATABASE_URL: z.string().min(1).optional(),
+  ORDER_SERVICE_DATABASE_URL: z.string().min(1).optional(),
   EVENT_SERVICE_DATABASE_URL: z.string().min(1).optional(),
   EMAIL_SERVICE_DATABASE_URL: z.string().min(1).optional(),
   ELASTICSEARCH_URL: z.url("ELASTICSEARCH_URL must be a valid URL").default("http://localhost:9200"),
@@ -72,6 +73,13 @@ const envSchema = z.object({
       message: "EVENT_SERVICE_DATABASE_URL is required for the Event service",
     });
   }
+  if (values.TICKETLIVE_SERVICE === "order" && !values.ORDER_SERVICE_DATABASE_URL) {
+    context.addIssue({
+      code: "custom",
+      path: ["ORDER_SERVICE_DATABASE_URL"],
+      message: "ORDER_SERVICE_DATABASE_URL is required for the Order service",
+    });
+  }
   if (values.TICKETLIVE_SERVICE === "email" && !values.EMAIL_SERVICE_DATABASE_URL) {
     context.addIssue({
       code: "custom",
@@ -90,6 +98,9 @@ const envSchema = z.object({
   }
   if (values.TICKETLIVE_SERVICE === "email" && !values.AMQP_URL) {
     context.addIssue({ code: "custom", path: ["AMQP_URL"], message: "AMQP_URL is required for the Email service" });
+  }
+  if (values.TICKETLIVE_SERVICE === "order" && !values.AMQP_URL) {
+    context.addIssue({ code: "custom", path: ["AMQP_URL"], message: "AMQP_URL is required for the Order service" });
   }
   if (values.NODE_ENV === "production" && values.TICKETLIVE_SERVICE === "email") {
     context.addIssue({

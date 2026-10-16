@@ -140,3 +140,21 @@ export async function getDeliveryByNotificationKey(notificationKey: string) {
     .where(eq(emailDeliveriesTable.notificationKey, notificationKey));
   return delivery;
 }
+
+export async function getEmailDeliveryMetricRows() {
+  return db.select({
+    status: emailDeliveriesTable.status,
+    providerName: emailDeliveriesTable.providerName,
+    deliveryCount: sql<number>`count(*)::int`,
+    attemptsTotal: sql<number>`coalesce(sum(${emailDeliveriesTable.attempts}), 0)::int`,
+    activeRetries: sql<number>`count(*) filter (
+      where ${emailDeliveriesTable.attempts} > 0
+        and ${emailDeliveriesTable.status} in ('queued', 'sending')
+    )::int`,
+    unknownProviderOutcomes: sql<number>`count(*) filter (
+      where ${emailDeliveriesTable.status} = 'sending'
+        and ${emailDeliveriesTable.lastError} = 'unknown_provider_outcome'
+    )::int`,
+  }).from(emailDeliveriesTable)
+    .groupBy(emailDeliveriesTable.status, emailDeliveriesTable.providerName);
+}

@@ -46,13 +46,96 @@ groups:
           description: This signal becomes available when the Event-owned hold table is introduced.
 
       - alert: TicketLiveRabbitDeadLetters
-        expr: ticketlive_rabbitmq_dead_letter_messages > 0
+        expr: rabbitmq_detailed_queue_messages{queue="email.send.v1.dlq"} > 0
         for: 2m
         labels:
           severity: warning
         annotations:
           summary: RabbitMQ has dead-lettered email jobs
-          description: This signal becomes available after the Email queue and DLQ are configured.
+          description: Inspect the DLQ reason and IDs, then use the replay runbook after fixing the cause.
+
+      - alert: TicketLiveRabbitMetricsUnavailable
+        expr: up{job="ticket-live-rabbitmq"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: RabbitMQ metrics are unavailable to Prometheus
+          description: Check the rabbitmq_prometheus plugin, scrape target, and broker availability.
+
+      - alert: TicketLiveEmailMetricsUnavailable
+        expr: up{job="ticket-live-email-service"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Email service metrics are unavailable to Prometheus
+          description: Check Email readiness, database access, and the metrics endpoint.
+
+      - alert: TicketLiveEmailQueueOldMessage
+        expr: time() - rabbitmq_detailed_queue_head_message_timestamp{queue=~"email.send.v1|email.send.v1.retry"} > 120
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: An Email command has waited in RabbitMQ for more than two minutes
+          description: Check Email consumer readiness, queue depth, and provider availability.
+
+      - alert: TicketLiveEmailQueueDepth
+        expr: rabbitmq_detailed_queue_messages{queue=~"email.send.v1|email.send.v1.retry"} > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Email commands have remained in RabbitMQ for five minutes
+          description: Check the Email consumer, provider outcomes, and retry queue.
+
+      - alert: TicketLiveEmailDeadLetterOldMessage
+        expr: time() - rabbitmq_detailed_queue_head_message_timestamp{queue="email.send.v1.dlq"} > 300
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: An Email dead letter has been waiting for operator review for more than five minutes
+          description: Inspect and resolve the dead-letter reason; preserve commandId and notificationKey on replay.
+
+      - alert: TicketLiveEmailQueueWithoutConsumer
+        expr: |
+          rabbitmq_detailed_queue_messages_ready{queue="email.send.v1"} > 0
+          and on (queue) rabbitmq_detailed_queue_consumers{queue="email.send.v1"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Email commands are queued without an active consumer
+          description: Check Email deployment readiness and RabbitMQ connectivity.
+
+      - alert: TicketLiveEmailProviderFailure
+        expr: sum(ticketlive_email_delivery_records{status="failed"}) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Email delivery rows have failed
+          description: Review provider outcomes and attempts; use the audited replay procedure after the cause is fixed.
+
+      - alert: TicketLiveEmailRetriesStalled
+        expr: sum(ticketlive_email_active_retries) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Email deliveries remain in retry after provider attempts
+          description: Check the retry queue, provider health, and recorded delivery attempts.
+
+      - alert: TicketLiveEmailUnknownProviderOutcome
+        expr: sum(ticketlive_email_unknown_provider_outcomes) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: An Email send has an unknown provider outcome
+          description: Reconcile with the provider before replaying to avoid sending a duplicate confirmation.
 
       - alert: TicketLivePaymentHoldMismatch
         expr: ticketlive_payment_hold_mismatch_total > 0

@@ -8,5 +8,18 @@ scrape_configs:
     static_configs:
       - targets: ["localhost:4002"]
 
+  - job_name: ticket-live-email-service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["localhost:4004"]
+
+  - job_name: ticket-live-rabbitmq
+    metrics_path: /metrics/detailed
+    params:
+      family: [queue_coarse_metrics, queue_metrics]
+      vhost: ["/"]
+    static_configs:
+      - targets: ["localhost:15692"]
+
 rule_files:
   - alerts.yml

@@ -7,4 +7,5 @@ export * from "./schema/checkoutAttempts.ts";
 export * from "./schema/revokedAccessTokens.ts";
 export * from "./schema/outboxEvents.ts";
 export * from "./schema/orderOutboxEvents.ts";
+export * from "./schema/emailReplayAudits.ts";
 export * from "./schema/emailDeliveries.ts";

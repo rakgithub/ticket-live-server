@@ -18,6 +18,7 @@ async function assertEmailTopology(channel: amqp.ConfirmChannel): Promise<void> 
 /** Publishes the temporary Order-to-Email command through a routed exchange. */
 export async function publishEmailSendCommand(
   message: EmailSendV1,
+  options: { replay?: boolean } = {},
 ): Promise<void> {
   const validatedMessage = EmailSendV1Schema.parse(message);
   const traceContext = getTraceContext();
@@ -44,9 +45,11 @@ export async function publishEmailSendCommand(
         messageId: validatedMessage.commandId,
         correlationId: traceContext?.correlationId ?? validatedMessage.commandId,
         type: "email.send.v1",
+        timestamp: Math.floor(Date.now() / 1_000),
         headers: {
           ...(traceContext ? { traceparent: traceContext.traceparent } : {}),
           ...(traceContext?.tracestate ? { tracestate: traceContext.tracestate } : {}),
+          ...(options.replay ? { "x-email-replay": true } : {}),
         },
       },
     );

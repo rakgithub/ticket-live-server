@@ -3,7 +3,6 @@ import { env } from "../config/env.ts";
 import { db } from "../db/client.ts";
 import { orderOutboxEventsTable } from "../db/schema/orderOutboxEvents.ts";
 import { publishEmailSendCommand } from "../messaging/publishOrderConfirmation.ts";
-import { EmailSendV1Schema } from "@ticket-live/contracts";
 import { createLogger } from "../observability/logger.ts";
 import {
   createMessageTraceContext,
@@ -14,6 +13,7 @@ import { expirePendingReservations } from "../services/orders/expireReservations
 import { reconcileCheckoutState } from "../services/orders/checkoutService.ts";
 import { releaseInventoryHoldCommand } from "../services/orders/releaseInventoryHold.ts";
 import { reconcileOrderInventory } from "../services/orders/reconcileInventory.ts";
+import { buildOrderConfirmationEmailCommand } from "../messaging/orderConfirmation.ts";
 
 const batchSize = 25;
 const logger = createLogger("ticket-live-outbox-worker");
@@ -37,34 +37,8 @@ async function processOutboxEvent(event: {
   createdAt: Date;
 }): Promise<void> {
   const payload = { ...event.payload };
-  delete payload.__telemetry;
   if (event.eventType === "order.confirmed") {
-    const order = payload as {
-      orderId: string;
-      customer: { name: string; email: string };
-      event: { name: string; location: string; startsAt: string };
-      quantity: number;
-      totalAmountCents: number;
-      currencyCode: string;
-    };
-    await publishEmailSendCommand(EmailSendV1Schema.parse({
-      commandId: event.id,
-      commandType: "email.send",
-      schemaVersion: 1,
-      notificationKey: `order-confirmation:${event.aggregateId}`,
-      templateId: "order-confirmation-v1",
-      recipient: order.customer.email,
-      data: {
-        orderId: order.orderId,
-        customerName: order.customer.name,
-        eventName: order.event.name,
-        eventLocation: order.event.location,
-        eventStartsAt: order.event.startsAt,
-        quantity: order.quantity,
-        totalAmountCents: order.totalAmountCents,
-        currencyCode: order.currencyCode,
-      },
-    }));
+    await publishEmailSendCommand(buildOrderConfirmationEmailCommand(event));
     return;
   }
 

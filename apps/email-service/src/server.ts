@@ -5,7 +5,8 @@ import { requireInternalServiceAuth } from "../../../src/auth/requireInternalSer
 import { env } from "../../../src/config/env.ts";
 import { pool } from "../../../src/db/client.ts";
 import { createLogger } from "../../../src/observability/logger.ts";
-import { getDeliveryByNotificationKey } from "./deliveryStore.ts";
+import { getDeliveryByNotificationKey, getEmailDeliveryMetricRows } from "./deliveryStore.ts";
+import { renderEmailMetrics } from "./metrics.ts";
 import { startEmailWorker } from "./emailWorker.ts";
 
 const logger = createLogger("ticket-live-email-service");
@@ -14,6 +15,19 @@ const worker = startEmailWorker();
 
 app.use(express.json({ limit: "100kb" }));
 app.use("/internal", requireInternalServiceAuth);
+
+app.get("/metrics", async (_req, res) => {
+  try {
+    const rows = await getEmailDeliveryMetricRows();
+    res.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
+    res.status(200).send(renderEmailMetrics(rows));
+  } catch (error) {
+    logger.error("Email delivery metrics query failed", {
+      errorType: error instanceof Error ? error.name : "UnknownError",
+    });
+    res.status(503).type("text/plain").send("Email delivery metrics unavailable\n");
+  }
+});
 
 app.get("/internal/deliveries/:notificationKey", async (req, res) => {
   const key = z.string().trim().min(1).max(255).safeParse(req.params.notificationKey);

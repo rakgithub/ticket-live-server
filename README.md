@@ -73,11 +73,14 @@ Requirements: Docker with the Compose plugin, and pnpm.
 6. Start the Order outbox worker:
 
    ```sh
-   pnpm start:worker
+   TICKETLIVE_SERVICE=order pnpm start:worker
    ```
 
-   The API listens at `http://localhost:4002`. The worker has no HTTP port; it
-   polls Order's PostgreSQL outbox and publishes email and inventory commands.
+   The API listens at `http://localhost:4002`. The worker has no HTTP port; set
+   `ORDER_SERVICE_DATABASE_URL` to the `ticketlive_order` DSN in `.env`. It polls
+   Order's PostgreSQL outbox and publishes email and inventory commands. Keep
+   one Order outbox worker active until row claims are implemented for
+   multi-worker operation.
 
 7. Start the Email service with its own database login:
 
@@ -88,6 +91,7 @@ Requirements: Docker with the Compose plugin, and pnpm.
    It listens on `http://localhost:4004`, consumes the `email.send.v1` queue,
    and temporarily drains the legacy `booking-confirmation-email` queue while
    `EMAIL_LEGACY_QUEUE_ENABLED=true`. Delivery records live in `email_service`.
+   Prometheus metrics are available at `http://localhost:4004/metrics`.
    The local fake provider records provider acceptance but does not send real
    email or generate PDFs.
 
@@ -211,6 +215,12 @@ verified sender/domain, webhook handling, and delivery policy are ready.
 The RabbitMQ test publisher and consumer under `src/scripts/` are development
 helpers. The test consumer reads from the same queue as the email worker, so do
 not leave it running while processing real confirmation messages.
+
+For monitoring and the audited one-order replay procedure, see
+[`docs/phase-4-cutover.md`](docs/phase-4-cutover.md). The local Prometheus
+configuration scrapes Order outbox metrics, Email delivery outcomes, and
+RabbitMQ queue depth and oldest-message timestamps. RabbitMQ's Prometheus
+endpoint is exposed on `localhost:15692` for local monitoring.
 
 ## Event search
 

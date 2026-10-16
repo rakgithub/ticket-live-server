@@ -52,11 +52,12 @@ Transient failures are routed to `email.send.v1.retry`, which waits for
 `EMAIL_RETRY_DELAY_MS` before returning the command to `email.send.v1`. A
 bounded number of attempts is controlled by `EMAIL_MAX_RETRIES`. Malformed
 commands, permanent provider failures, and exhausted retries go to
-`email.send.v1.dlq`; they are not immediately requeued forever. Monitor DLQ
-depth and the age of its oldest message using RabbitMQ metrics or the management
-UI. The message header `x-email-first-failed-at` records when retrying began.
-Configure the deployment's normal alerting to page the Email owner when DLQ
-depth or age exceeds its agreed threshold.
+`email.send.v1.dlq`; they are not immediately requeued forever. Prometheus
+scrapes RabbitMQ's `rabbitmq_prometheus` plugin for queue depth and oldest
+message timestamps, and the Email `/metrics` endpoint for delivery attempts
+and provider outcomes. The Phase 4 rules and dashboard alert on old messages
+and non-empty DLQ state. The message header `x-email-first-failed-at` records
+when retrying began.
 
 To inspect a DLQ message, use the RabbitMQ management UI's non-destructive
 message view and verify the dead-letter reason, command ID, notification key,

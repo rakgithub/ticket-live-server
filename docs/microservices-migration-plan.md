@@ -1,6 +1,6 @@
 # Ticket Live: phased migration to three microservices
 
-Status: Phases 0–3 implemented; Phase 4 direct-path hardening is next. Updated 16 October 2026.
+Status: Phases 0–3 and Phase 4 code/runbook implemented; live legacy-queue drain and deployment cutover sign-off remain pending. Updated 16 October 2026.
 
 ## 1. Outcome and decisions
 
@@ -128,6 +128,11 @@ There is no fourth service or second broker in this migration. Phase 4 turns the
 5. Revisit a Notification service and/or retained event stream only after a product requirement establishes multiple channels, user preference/routing rules, or independently evolving consumers needing self-service replay. Record that as a new ADR and plan a separate migration; do not pre-provision Kafka, its credentials, or a Notification database in this phase.
 
 Acceptance checks: the legacy queue has a recorded zero-message drain; RabbitMQ failure leaves the Order outbox pending and checkout completion unaffected; a relayed duplicate produces one logical Email delivery; DLQ messages have an inspected-and-replayable operator path; dashboards and alerts cover outbox, queue, DLQ, and delivery health; no deployed process needs Kafka or a Notification-service credential.
+
+The operator procedure and replay audit query are in
+[`phase-4-cutover.md`](phase-4-cutover.md). Repository implementation does not
+certify the live legacy queue drain; complete that cutover record before
+disabling `EMAIL_LEGACY_QUEUE_ENABLED` in a deployed Email environment.
 
 ## 9. Contracts and data rules to implement
 

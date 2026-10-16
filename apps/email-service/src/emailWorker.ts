@@ -157,6 +157,7 @@ async function publishRetry(
       correlationId: source.properties.correlationId ?? message.commandId,
       messageId: message.commandId,
       type: "email.send.v1",
+      timestamp: Math.floor(Date.now() / 1_000),
       headers,
       persistent: true,
     },
@@ -184,6 +185,7 @@ async function publishDeadLetter(
       correlationId: message.properties.correlationId ?? message.properties.messageId ?? randomUUID(),
       messageId: message.properties.messageId ?? normalized?.commandId ?? randomUUID(),
       type: "email.send.v1.dead-letter",
+      timestamp: Math.floor(Date.now() / 1_000),
       headers,
       persistent: true,
     },
@@ -247,12 +249,14 @@ async function handleProcessingFailure(
 
   if (!permanent && retryCount < env.EMAIL_MAX_RETRIES) {
     const nextRetryCount = retryCount + 1;
-    await publishRetry(publisher, command, message, nextRetryCount);
+    // Start the durable due time before publishing to the TTL queue so the
+    // returned message cannot beat the database timestamp by a few ms.
     await scheduleDeliveryRetry(
       command.notificationKey,
       new Date(Date.now() + env.EMAIL_RETRY_DELAY_MS),
       code,
     ).catch(() => undefined);
+    await publishRetry(publisher, command, message, nextRetryCount);
     logger.warn("Email command scheduled for delayed retry", {
       commandId: command.commandId,
       notificationKey: command.notificationKey,
@@ -329,6 +333,14 @@ async function consumeMessage(
         return;
       }
       if (claim.kind === "not_due") {
+        // Keep a message that arrived before its durable due time instead of
+        // acknowledging and losing the only retry command.
+        await publishRetry(
+          publisher,
+          command,
+          message,
+          headerNumber(message, "x-email-retry-count"),
+        );
         consumer.ack(message);
         finishSpan("ok", { "email.retry.not_due": true });
         return;
