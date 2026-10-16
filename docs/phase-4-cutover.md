@@ -15,12 +15,14 @@ claimed safely across multiple workers.
    `MIGRATION_DATABASE_URL` before deploying code that writes replay audits.
 3. Configure the Order worker and replay command with
    `TICKETLIVE_SERVICE=order`, `ORDER_SERVICE_DATABASE_URL` using the
-   `ticketlive_order` role, and `AMQP_URL`. Keep the public API and Email
-   service on their own database URLs.
+   `ticketlive_order` role and `ORDER_AMQP_URL`. Keep the public API and Email
+   service on their own database URLs; Email uses `EMAIL_AMQP_URL`. Give Order
+   and Email their separate runtime broker principals and disable application
+   topology declaration after the broker definitions are installed.
 4. Enable RabbitMQ's `rabbitmq_prometheus` plugin and expose its scrape
    endpoint only to the monitoring network. Scrape its detailed
-   endpoint for the `/` virtual host. Prometheus also scrapes the public API
-   and Email `/metrics`; import
+   endpoint for the `/` virtual host. Prometheus also scrapes Public API,
+   Order, Event, and Email `/metrics`; import
    `ops/grafana/ticket-live-phase-0-dashboard.json` and load
    `ops/prometheus/alerts.yml`.
 5. Confirm the legacy publisher has been stopped. Leave

@@ -5,7 +5,10 @@ import { getOtlpMetricSnapshot } from "./metrics.ts";
 const logger = createLogger("ticket-live-observability");
 let lastExportWarningAt = 0;
 
-export function exportOtlpMetrics(outbox?: { pending: number; oldestAgeSeconds: number }): void {
+export function exportOtlpMetrics(
+  outbox?: { pending: number; oldestAgeSeconds: number },
+  serviceName = "ticket-live-public-api",
+): void {
   const endpoint = env.OTEL_EXPORTER_OTLP_ENDPOINT;
   if (!endpoint) return;
 
@@ -86,7 +89,7 @@ export function exportOtlpMetrics(outbox?: { pending: number; oldestAgeSeconds: 
   void sendMetrics(endpoint, {
     resourceMetrics: [{
       resource: {
-        attributes: [{ key: "service.name", value: { stringValue: "ticket-live-public-api" } }],
+        attributes: [{ key: "service.name", value: { stringValue: serviceName } }],
       },
       scopeMetrics: [{
         scope: { name: "ticket-live.observability", version: "1.0.0" },

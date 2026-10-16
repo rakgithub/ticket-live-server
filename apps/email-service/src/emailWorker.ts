@@ -15,7 +15,7 @@ import {
   type EmailSendV1,
 } from "@ticket-live/contracts";
 import { randomUUID } from "node:crypto";
-import { env } from "../../../src/config/env.ts";
+import { emailAmqpUrl, env } from "../../../src/config/env.ts";
 import { createLogger } from "../../../src/observability/logger.ts";
 import {
   createMessageTraceContext,
@@ -400,11 +400,13 @@ async function consumeMessage(
 }
 
 async function openSession(): Promise<ActiveSession> {
-  const connection = await amqp.connect(env.AMQP_URL);
+  const connection = await amqp.connect(emailAmqpUrl);
   try {
     const consumerChannel = await connection.createChannel();
     const publisherChannel = await connection.createConfirmChannel();
-    await assertEmailTopology(consumerChannel, env.EMAIL_LEGACY_QUEUE_ENABLED);
+    if (env.RABBITMQ_AUTO_DECLARE_TOPOLOGY) {
+      await assertEmailTopology(consumerChannel, env.EMAIL_LEGACY_QUEUE_ENABLED);
+    }
     await consumerChannel.prefetch(1);
     await consumerChannel.consume(emailSendQueueName, (message) => {
       if (message) void consumeMessage(consumerChannel, publisherChannel, emailSendQueueName, message)

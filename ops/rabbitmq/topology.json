@@ -1,0 +1,26 @@
+{
+  "rabbit_version": "4.0.0",
+  "users": [],
+  "vhosts": [{ "name": "/" }],
+  "permissions": [],
+  "topic_permissions": [],
+  "parameters": [],
+  "global_parameters": [],
+  "policies": [],
+  "exchanges": [
+    { "name": "ticket-live.email", "vhost": "/", "type": "direct", "durable": true, "auto_delete": false, "internal": false, "arguments": {} },
+    { "name": "ticket-live.email.retry", "vhost": "/", "type": "direct", "durable": true, "auto_delete": false, "internal": false, "arguments": {} },
+    { "name": "ticket-live.email.dead", "vhost": "/", "type": "direct", "durable": true, "auto_delete": false, "internal": false, "arguments": {} }
+  ],
+  "queues": [
+    { "name": "email.send.v1", "vhost": "/", "durable": true, "auto_delete": false, "arguments": {} },
+    { "name": "email.send.v1.retry", "vhost": "/", "durable": true, "auto_delete": false, "arguments": { "x-message-ttl": 30000, "x-dead-letter-exchange": "ticket-live.email", "x-dead-letter-routing-key": "email.send.v1" } },
+    { "name": "email.send.v1.dlq", "vhost": "/", "durable": true, "auto_delete": false, "arguments": {} },
+    { "name": "booking-confirmation-email", "vhost": "/", "durable": true, "auto_delete": false, "arguments": {} }
+  ],
+  "bindings": [
+    { "source": "ticket-live.email", "vhost": "/", "destination": "email.send.v1", "destination_type": "queue", "routing_key": "email.send.v1", "arguments": {} },
+    { "source": "ticket-live.email.retry", "vhost": "/", "destination": "email.send.v1.retry", "destination_type": "queue", "routing_key": "email.send.v1.retry", "arguments": {} },
+    { "source": "ticket-live.email.dead", "vhost": "/", "destination": "email.send.v1.dlq", "destination_type": "queue", "routing_key": "email.send.v1.dead", "arguments": {} }
+  ]
+}

@@ -1,10 +1,9 @@
 import type { Request, Response } from "express";
-import {
-  CheckoutIdempotencyKeySchema,
-  CheckoutRequestSchema,
-  CheckoutResponseSchema,
-} from "@ticket-live/contracts";
-import { CheckoutError, checkout } from "../../services/orders/checkoutService.ts";
+import { and, eq, isNull } from "drizzle-orm";
+import { CheckoutIdempotencyKeySchema, CheckoutRequestSchema } from "@ticket-live/contracts";
+import { db } from "../../db/client.ts";
+import { usersTable } from "../../db/schema/users.ts";
+import { getOrderServiceClient, OrderServiceError } from "../../services/orders/orderServiceClient.ts";
 import { createLogger } from "../../observability/logger.ts";
 
 const logger = createLogger("ticket-live-public-api");
@@ -30,12 +29,21 @@ export async function postCheckout(req: Request, res: Response): Promise<void> {
   }
 
   try {
-    const checkoutResult = await checkout(
+    const [customer] = await db
+      .select({ name: usersTable.displayName, email: usersTable.email })
+      .from(usersTable)
+      .where(and(eq(usersTable.id, req.auth.userId), isNull(usersTable.deletedAt)))
+      .limit(1);
+    if (!customer) {
+      res.status(404).json({ error: "Customer account is not available" });
+      return;
+    }
+    const response = await getOrderServiceClient().checkout(
       req.auth.userId,
       parsedBody.data,
+      customer,
       parsedIdempotencyKey.data,
     );
-    const response = CheckoutResponseSchema.parse(checkoutResult);
     logger.info("Checkout confirmed", {
       orderId: response.order.id,
       eventId: response.event.id,
@@ -43,7 +51,7 @@ export async function postCheckout(req: Request, res: Response): Promise<void> {
     });
     res.status(201).json(response);
   } catch (error) {
-    if (error instanceof CheckoutError) {
+    if (error instanceof OrderServiceError) {
       const logCheckoutError = error.status >= 500 ? logger.error : logger.warn;
       logCheckoutError("Checkout did not complete", {
         eventId: parsedBody.data.eventId,

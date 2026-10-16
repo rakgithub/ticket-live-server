@@ -7,6 +7,14 @@ export const CheckoutRequestSchema = z.object({
 
 export const CheckoutIdempotencyKeySchema = z.string().trim().min(1).max(255);
 
+/** Trusted API-to-Order handoff; user identity is carried separately in a header. */
+export const InternalCheckoutRequestSchema = CheckoutRequestSchema.extend({
+  customer: z.object({
+    name: z.string().trim().min(1).max(255),
+    email: z.email().trim().toLowerCase(),
+  }).strict(),
+}).strict();
+
 export const InventoryHoldCreateRequestSchema = z.object({
   orderId: z.uuid(),
   quantity: z.number().int().positive().max(10_000),
@@ -130,6 +138,7 @@ export const EmailDeliveryResponseSchema = z.object({ delivery: EmailDeliverySch
 
 export type CheckoutRequest = z.infer<typeof CheckoutRequestSchema>;
 export type CheckoutIdempotencyKey = z.infer<typeof CheckoutIdempotencyKeySchema>;
+export type InternalCheckoutRequest = z.infer<typeof InternalCheckoutRequestSchema>;
 export type CheckoutResponse = z.infer<typeof CheckoutResponseSchema>;
 export type InventoryHoldCreateRequest = z.infer<typeof InventoryHoldCreateRequestSchema>;
 export type InventoryHoldIdempotencyKey = z.infer<typeof InventoryHoldIdempotencyKeySchema>;

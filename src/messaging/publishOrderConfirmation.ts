@@ -6,7 +6,7 @@ import {
   EmailSendV1Schema,
   type EmailSendV1,
 } from "@ticket-live/contracts";
-import { env } from "../config/env.ts";
+import { env, orderAmqpUrl } from "../config/env.ts";
 import { getTraceContext } from "../observability/traceContext.ts";
 
 async function assertEmailTopology(channel: amqp.ConfirmChannel): Promise<void> {
@@ -22,12 +22,12 @@ export async function publishEmailSendCommand(
 ): Promise<void> {
   const validatedMessage = EmailSendV1Schema.parse(message);
   const traceContext = getTraceContext();
-  const connection = await amqp.connect(env.AMQP_URL);
+  const connection = await amqp.connect(orderAmqpUrl);
   const channel = await connection.createConfirmChannel();
   let returned: Error | undefined;
 
   try {
-    await assertEmailTopology(channel);
+    if (env.RABBITMQ_AUTO_DECLARE_TOPOLOGY) await assertEmailTopology(channel);
     channel.on("return", (returnedMessage) => {
       returned = new Error(
         `RabbitMQ could not route email command ${returnedMessage.properties.messageId ?? validatedMessage.commandId}`,

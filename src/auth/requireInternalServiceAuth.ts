@@ -1,10 +1,26 @@
 import { timingSafeEqual } from "node:crypto";
 import type { RequestHandler } from "express";
-import { env } from "../config/env.ts";
+import { env, serviceCredential, type InternalCredential } from "../config/env.ts";
+
+function expectedCredentials(req: Parameters<RequestHandler>[0]): string[] {
+  let names: InternalCredential[];
+  if (env.TICKETLIVE_SERVICE === "event") {
+    const inventoryPath = /^\/events\/[^/]+\/holds$/.test(req.path) ||
+      /^\/holds\/[^/]+(?:\/(?:confirm|release))?$/.test(req.path);
+    names = [inventoryPath ? "order-event" : "public-api-event"];
+  } else if (env.TICKETLIVE_SERVICE === "order") {
+    names = ["public-api-order"];
+  } else if (env.TICKETLIVE_SERVICE === "email") {
+    names = ["email-internal"];
+  } else {
+    names = [];
+  }
+  return names.map((name) => serviceCredential(name)).filter((value): value is string => Boolean(value));
+}
 
 export const requireInternalServiceAuth: RequestHandler = (req, res, next) => {
-  const expectedToken = env.INTERNAL_SERVICE_TOKEN;
-  if (!expectedToken) {
+  const credentials = expectedCredentials(req);
+  if (credentials.length === 0) {
     res.status(503).json({ error: "Internal service authentication is not configured" });
     return;
   }
@@ -16,8 +32,11 @@ export const requireInternalServiceAuth: RequestHandler = (req, res, next) => {
   }
 
   const received = Buffer.from(match[1]);
-  const expected = Buffer.from(expectedToken);
-  if (received.length !== expected.length || !timingSafeEqual(received, expected)) {
+  const authorized = credentials.some((credential) => {
+    const expected = Buffer.from(credential);
+    return received.length === expected.length && timingSafeEqual(received, expected);
+  });
+  if (!authorized) {
     res.status(401).json({ error: "Invalid service credentials" });
     return;
   }

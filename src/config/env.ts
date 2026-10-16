@@ -7,6 +7,7 @@ const envSchema = z.object({
     .enum(["development", "test", "production"])
     .default("development"),
   PORT: z.coerce.number().int().min(1).max(65_535).default(4002),
+  ORDER_SERVICE_PORT: z.coerce.number().int().min(1).max(65_535).default(4005),
   EVENT_SERVICE_PORT: z.coerce.number().int().min(1).max(65_535).default(4003),
   EMAIL_SERVICE_PORT: z.coerce.number().int().min(1).max(65_535).default(4004),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
@@ -22,7 +23,12 @@ const envSchema = z.object({
   EVENT_CHAT_MODEL: z.string().trim().min(1).default("gemini-3.8-flash"),
   EVENT_CHAT_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(30_000),
   EVENT_CHAT_MAX_ACTIVE_PER_USER: z.coerce.number().int().min(1).max(10).default(2),
+  // AMQP_URL remains a local compatibility fallback while deployments move to
+  // one broker principal per service.
   AMQP_URL: z.string().default(""),
+  ORDER_AMQP_URL: z.string().default(""),
+  EMAIL_AMQP_URL: z.string().default(""),
+  RABBITMQ_AUTO_DECLARE_TOPOLOGY: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
   OTEL_EXPORTER_OTLP_ENDPOINT: z
     .string()
     .optional()
@@ -48,6 +54,12 @@ const envSchema = z.object({
       "INTERNAL_SERVICE_TOKEN must be at least 32 printable ASCII bytes",
     )
     .optional(),
+  PUBLIC_API_ORDER_TOKEN: z.string().regex(/^[\x21-\x7E]{32,}$/).optional(),
+  PUBLIC_API_EVENT_TOKEN: z.string().regex(/^[\x21-\x7E]{32,}$/).optional(),
+  ORDER_EVENT_TOKEN: z.string().regex(/^[\x21-\x7E]{32,}$/).optional(),
+  EMAIL_INTERNAL_TOKEN: z.string().regex(/^[\x21-\x7E]{32,}$/).optional(),
+  ORDER_SERVICE_URL: z.url().default("http://localhost:4005"),
+  ORDER_SERVICE_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(45_000),
   INVENTORY_SERVICE_URL: z.url().default("http://localhost:4003"),
   EVENT_SERVICE_URL: z.url().default("http://localhost:4003"),
   ACCESS_TOKEN_TTL: z
@@ -93,14 +105,11 @@ const envSchema = z.object({
   if (values.TICKETLIVE_SERVICE === "public-api" && !values.JWT_SECRET) {
     context.addIssue({ code: "custom", path: ["JWT_SECRET"], message: "JWT_SECRET is required for the public API" });
   }
-  if (values.TICKETLIVE_SERVICE === "public-api" && !values.AMQP_URL) {
-    context.addIssue({ code: "custom", path: ["AMQP_URL"], message: "AMQP_URL is required for the public API" });
+  if (values.TICKETLIVE_SERVICE === "email" && !values.EMAIL_AMQP_URL && !values.AMQP_URL) {
+    context.addIssue({ code: "custom", path: ["EMAIL_AMQP_URL"], message: "EMAIL_AMQP_URL is required for the Email service" });
   }
-  if (values.TICKETLIVE_SERVICE === "email" && !values.AMQP_URL) {
-    context.addIssue({ code: "custom", path: ["AMQP_URL"], message: "AMQP_URL is required for the Email service" });
-  }
-  if (values.TICKETLIVE_SERVICE === "order" && !values.AMQP_URL) {
-    context.addIssue({ code: "custom", path: ["AMQP_URL"], message: "AMQP_URL is required for the Order service" });
+  if (values.TICKETLIVE_SERVICE === "order" && !values.ORDER_AMQP_URL && !values.AMQP_URL) {
+    context.addIssue({ code: "custom", path: ["ORDER_AMQP_URL"], message: "ORDER_AMQP_URL is required for the Order service" });
   }
   if (values.NODE_ENV === "production" && values.TICKETLIVE_SERVICE === "email") {
     context.addIssue({
@@ -116,12 +125,74 @@ const envSchema = z.object({
       message: "CORS_ORIGINS must be configured in production",
     });
   }
-  if (values.NODE_ENV === "production" && !values.INTERNAL_SERVICE_TOKEN) {
-    context.addIssue({
-      code: "custom",
-      path: ["INTERNAL_SERVICE_TOKEN"],
-      message: "INTERNAL_SERVICE_TOKEN must be configured in production",
-    });
+  if (values.NODE_ENV === "production") {
+    const dedicatedTokens: Array<[string, string | undefined]> = values.TICKETLIVE_SERVICE === "public-api"
+      ? [["PUBLIC_API_ORDER_TOKEN", values.PUBLIC_API_ORDER_TOKEN], ["PUBLIC_API_EVENT_TOKEN", values.PUBLIC_API_EVENT_TOKEN]]
+      : values.TICKETLIVE_SERVICE === "order"
+        ? [["ORDER_EVENT_TOKEN", values.ORDER_EVENT_TOKEN]]
+        : values.TICKETLIVE_SERVICE === "event"
+          ? [["PUBLIC_API_EVENT_TOKEN", values.PUBLIC_API_EVENT_TOKEN], ["ORDER_EVENT_TOKEN", values.ORDER_EVENT_TOKEN]]
+          : [["EMAIL_INTERNAL_TOKEN", values.EMAIL_INTERNAL_TOKEN]];
+    for (const [name, token] of dedicatedTokens) {
+      if (!token || /replace-with|change-me|^local-/i.test(token)) {
+        context.addIssue({ code: "custom", path: [name], message: `${name} must be a unique production secret; INTERNAL_SERVICE_TOKEN is development-only` });
+      }
+    }
+    if (new Set(dedicatedTokens.map(([, token]) => token)).size !== dedicatedTokens.length) {
+      context.addIssue({ code: "custom", path: ["PUBLIC_API_EVENT_TOKEN"], message: "Each service relationship must use a different production credential" });
+    }
+    if ((values.TICKETLIVE_SERVICE === "order" || values.TICKETLIVE_SERVICE === "email") && values.RABBITMQ_AUTO_DECLARE_TOPOLOGY) {
+      context.addIssue({ code: "custom", path: ["RABBITMQ_AUTO_DECLARE_TOPOLOGY"], message: "Production services must use pre-provisioned RabbitMQ topology" });
+    }
+    if (values.TICKETLIVE_SERVICE === "order" && !values.ORDER_AMQP_URL) {
+      context.addIssue({ code: "custom", path: ["ORDER_AMQP_URL"], message: "ORDER_AMQP_URL must be configured in production" });
+    }
+    if (values.TICKETLIVE_SERVICE === "email" && !values.EMAIL_AMQP_URL) {
+      context.addIssue({ code: "custom", path: ["EMAIL_AMQP_URL"], message: "EMAIL_AMQP_URL must be configured in production" });
+    }
+    const requireTls = (value: string | undefined, name: string, protocol: string) => {
+      let actualProtocol = "";
+      try { actualProtocol = value ? new URL(value).protocol : ""; } catch { /* Report below. */ }
+      if (actualProtocol !== protocol) {
+        context.addIssue({ code: "custom", path: [name], message: `${name} must use ${protocol} in production` });
+      }
+    };
+    const databaseSetting = values.TICKETLIVE_SERVICE === "public-api"
+      ? "DATABASE_URL"
+      : values.TICKETLIVE_SERVICE === "order"
+        ? "ORDER_SERVICE_DATABASE_URL"
+        : values.TICKETLIVE_SERVICE === "event"
+          ? "EVENT_SERVICE_DATABASE_URL"
+          : "EMAIL_SERVICE_DATABASE_URL";
+    const databaseUrl = values.TICKETLIVE_SERVICE === "public-api"
+      ? values.DATABASE_URL
+      : values.TICKETLIVE_SERVICE === "order"
+        ? values.ORDER_SERVICE_DATABASE_URL
+        : values.TICKETLIVE_SERVICE === "event"
+          ? values.EVENT_SERVICE_DATABASE_URL
+          : values.EMAIL_SERVICE_DATABASE_URL;
+    let databaseSslMode = "";
+    try { databaseSslMode = databaseUrl ? new URL(databaseUrl).searchParams.get("sslmode") ?? "" : ""; } catch { /* Report below. */ }
+    if (!new Set(["require", "verify-ca", "verify-full"]).has(databaseSslMode)) {
+      context.addIssue({ code: "custom", path: [databaseSetting], message: "The service database URL must set sslmode=require or stricter in production" });
+    }
+    if (values.TICKETLIVE_SERVICE === "public-api") {
+      requireTls(values.EVENT_SERVICE_URL, "EVENT_SERVICE_URL", "https:");
+      requireTls(values.ORDER_SERVICE_URL, "ORDER_SERVICE_URL", "https:");
+      if (/replace-with|change-me|^local-/i.test(values.JWT_SECRET)) {
+        context.addIssue({ code: "custom", path: ["JWT_SECRET"], message: "Replace the example JWT secret in production" });
+      }
+    }
+    if (values.TICKETLIVE_SERVICE === "order") {
+      requireTls(values.INVENTORY_SERVICE_URL, "INVENTORY_SERVICE_URL", "https:");
+      requireTls(values.ORDER_AMQP_URL, "ORDER_AMQP_URL", "amqps:");
+    }
+    if (values.TICKETLIVE_SERVICE === "email") {
+      requireTls(values.EMAIL_AMQP_URL, "EMAIL_AMQP_URL", "amqps:");
+    }
+    if (values.TICKETLIVE_SERVICE === "event") {
+      requireTls(values.ELASTICSEARCH_URL, "ELASTICSEARCH_URL", "https:");
+    }
   }
 });
 
@@ -144,6 +215,26 @@ if (
 }
 
 export const env = parsedEnv.data;
+
+export type InternalCredential =
+  | "public-api-order"
+  | "public-api-event"
+  | "order-event"
+  | "email-internal";
+
+/** Local fallback is intentionally disabled in production. */
+export function serviceCredential(name: InternalCredential): string | undefined {
+  const dedicated = {
+    "public-api-order": env.PUBLIC_API_ORDER_TOKEN,
+    "public-api-event": env.PUBLIC_API_EVENT_TOKEN,
+    "order-event": env.ORDER_EVENT_TOKEN,
+    "email-internal": env.EMAIL_INTERNAL_TOKEN,
+  }[name];
+  return dedicated ?? (env.NODE_ENV === "production" ? undefined : env.INTERNAL_SERVICE_TOKEN);
+}
+
+export const orderAmqpUrl = env.ORDER_AMQP_URL || env.AMQP_URL;
+export const emailAmqpUrl = env.EMAIL_AMQP_URL || env.AMQP_URL;
 
 export const corsOrigins = new Set(
   env.CORS_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean),

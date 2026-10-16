@@ -9,95 +9,73 @@ a simulated confirmation delivery.
 
 ## Local services
 
-Requirements: Docker with the Compose plugin, and pnpm.
+Requirements: Docker with the Compose plugin, pnpm 11, and Node.js 24 or newer.
 
-1. Create your local environment file:
+1. Create `.env` and set local database passwords, broker passwords, and
+   independent service tokens:
 
    ```sh
    cp .env.example .env
    ```
 
-2. Start PostgreSQL, Elasticsearch, and RabbitMQ:
+2. Start the infrastructure services:
 
    ```sh
-   docker compose up -d
+   docker compose up -d postgres elasticsearch rabbitmq
    ```
-
-   Run the one-time, repeatable database-role bootstrap after PostgreSQL is
-   healthy:
-
-   ```sh
-   docker compose run --rm db-role-bootstrap
-   ```
-
-   This creates `identity_service`, `order_service`, `event_service`, and
-   `email_service` schemas with separate local
-   roles, and a temporary `ticketlive_public_api` runtime login for the current
-   integrated app. The Order and Event storage migrations fill their schemas.
-   Migrations use `MIGRATION_DATABASE_URL`;
-   set the `TICKETLIVE_*_DB_PASSWORD` values in `.env` before using these
-   logins. The public API compatibility login is intentionally able to access
-   all legacy tables until the first ownership cutover.
 
    PostgreSQL is available at `localhost:5433`, Elasticsearch at
    `http://localhost:9200`, and RabbitMQ at `localhost:5672`. RabbitMQ's
-   management dashboard is at `http://localhost:15672` (`guest` / `guest`).
-   The services keep their data in named Docker volumes, so it survives
-   container restarts.
+   management dashboard is at `http://localhost:15672`; the credentials come
+   from `RABBITMQ_ADMIN_USER` and `RABBITMQ_ADMIN_PASSWORD` in `.env`.
 
-3. Apply the checked-in Drizzle migrations:
-
-   ```sh
-   pnpm exec drizzle-kit migrate
-   ```
-
-4. Start Event service in a terminal, using the Event-owned database login:
+3. Create the local service database roles and RabbitMQ users:
 
    ```sh
-   EVENT_SERVICE_DATABASE_URL=postgres://ticketlive_event:local-event-password@localhost:5433/ticket_live pnpm start:event-service
+   docker compose --profile bootstrap run --rm db-role-bootstrap
+   docker compose --profile bootstrap run --rm rabbitmq-role-bootstrap
    ```
 
-   It listens at `http://localhost:4003`, owns event catalog and inventory
-   tables, expires holds, and indexes its transactional outbox. Keep this
-   database URL only in the Event service process environment.
+   The repeatable PostgreSQL bootstrap grants the public API access to identity
+   records and revokes its former access to `order_service`. Order, Event, and
+   Email get separate database logins. The RabbitMQ bootstrap creates separate
+   local Order and Email principals; production credentials and ACLs are
+   managed outside Compose.
 
-5. Start the public API server in another terminal:
+4. Apply the checked-in Drizzle migrations before starting the applications:
 
    ```sh
-   pnpm start
+   docker compose --profile tooling run --rm migrations
    ```
 
-   The equivalent workspace entry point is
-   `pnpm --filter @ticket-live/public-api start`.
+   The Compose migration job uses the PostgreSQL admin credentials from `.env`
+   and connects on the Compose network. The Compose application profile never
+   applies migrations automatically. To run migrations from the host instead,
+   install dependencies with `pnpm install` and run
+   `pnpm exec drizzle-kit migrate` using `MIGRATION_DATABASE_URL`.
 
-6. Start the Order outbox worker:
+5. Build and start all four applications:
 
    ```sh
-   TICKETLIVE_SERVICE=order pnpm start:worker
+   docker compose --profile apps up -d --build
    ```
 
-   The API listens at `http://localhost:4002`. The worker has no HTTP port; set
-   `ORDER_SERVICE_DATABASE_URL` to the `ticketlive_order` DSN in `.env`. It polls
-   Order's PostgreSQL outbox and publishes email and inventory commands. Keep
-   one Order outbox worker active until row claims are implemented for
-   multi-worker operation.
+   The public API listens at `http://localhost:4002`, Event at `:4003`, Email
+   at `:4004`, and Order at `:4005`. The API checks user identity and passes a
+   minimized customer snapshot to Order over the private service interface.
+   Order owns checkout, payment state, reconciliation, and its transactional
+   outbox. Keep one Order service instance active until outbox row claims are
+   implemented for multi-instance operation.
 
-7. Start the Email service with its own database login:
+The public API, Order, Event, and Email expose `/health/live`, `/health/ready`,
+and `/metrics`. Prometheus scrapes those endpoints and RabbitMQ queue metrics
+using [`ops/prometheus/prometheus.yml`](ops/prometheus/prometheus.yml). Configure
+`OTEL_EXPORTER_OTLP_ENDPOINT` to send service traces and metrics to a collector.
+The local fake Email provider records simulated provider acceptance; it does
+not send real email or generate PDFs. Production Email startup remains disabled
+until a real provider is configured.
 
-   ```sh
-   EMAIL_SERVICE_DATABASE_URL=postgres://ticketlive_email:local-email-password@localhost:5433/ticket_live pnpm start:email-service
-   ```
-
-   It listens on `http://localhost:4004`, consumes the `email.send.v1` queue,
-   and temporarily drains the legacy `booking-confirmation-email` queue while
-   `EMAIL_LEGACY_QUEUE_ENABLED=true`. Delivery records live in `email_service`.
-   Prometheus metrics are available at `http://localhost:4004/metrics`.
-   The local fake provider records provider acceptance but does not send real
-   email or generate PDFs.
-
-The API exposes `GET /health/live`, `GET /health/ready`, and `GET /metrics`.
-Configure `OTEL_EXPORTER_OTLP_ENDPOINT` to send OTLP traces and metrics to a
-collector. The Phase 0 ownership, contract, and behavior baseline is in
+The Phase 0 ownership, contract, and behavior baseline is in
 [`docs/phase-0-baseline.md`](docs/phase-0-baseline.md); current API and message
 schemas are in [`docs/contracts/`](docs/contracts/).
 The Email service migration and queue drain procedure is in
@@ -113,11 +91,10 @@ pnpm typecheck
 pnpm test
 ```
 
-The service-only inventory endpoints under `/internal` use
-`INTERNAL_SERVICE_TOKEN`. Set it in `.env` to a random value of at least 32
-bytes (the `.env.example` value is a placeholder) and give it only to trusted
-service callers; production startup requires it. The internal API is not for
-browser clients. Active holds expire every two seconds by default;
+Service-only endpoints under `/internal` use separate credentials for the
+public API to Order, public API to Event, Order to Event, and Email's internal
+lookup. Production startup rejects the shared development fallback. Do not
+expose internal routes to browser clients. Active holds expire every two seconds by default;
 `INVENTORY_HOLD_EXPIRY_POLL_INTERVAL_MS` adjusts that polling interval.
 Order calls the Event inventory API at `INVENTORY_SERVICE_URL`, which defaults
 to `http://localhost:4003`. Public catalog and chat requests use
@@ -151,6 +128,9 @@ After a checkout payment succeeds, the order, payment, and `order.confirmed`
 row in `order_service.outbox_events` are committed in one PostgreSQL
 transaction. The API can then return
 the confirmed order without waiting for RabbitMQ or background email handling.
+Only the Order database login can read or write this schema; the public API
+loads the customer name and email from its identity store and sends those
+minimal fields with the authenticated checkout handoff.
 
 Inspect pending outbox rows with:
 
@@ -159,8 +139,8 @@ docker compose exec postgres psql -U user -d ticket_live \
   -c "SELECT id, event_type, aggregate_id, payload, created_at FROM event_service.outbox_events WHERE processed_at IS NULL UNION ALL SELECT id, event_type, aggregate_id, payload, created_at FROM order_service.outbox_events WHERE processed_at IS NULL ORDER BY created_at;"
 ```
 
-Rows remain pending until their owning service's relay processes them. The Event
-service indexes catalog changes, while the Order worker routes:
+Rows remain pending until their owning service's relay processes them. Event
+indexes catalog changes, while the Order service routes:
 
 - `order.confirmed` is adapted to an `email.send.v1` RabbitMQ command for the
   email worker. The command has a stable notification key, persistent delivery,
@@ -168,7 +148,7 @@ service indexes catalog changes, while the Order worker routes:
 - `inventory.hold.release` is retried against Event by stable hold ID after an
   Order payment failure or reservation expiry.
 
-The Event service processes `event_service.outbox_events`; the Order worker
+The Event service processes `event_service.outbox_events`; the Order service
 processes `order_service.outbox_events`. Each marks a row processed after its
 destination accepts the event. Failed rows retain attempt counts and retry with
 capped exponential backoff and jitter.
@@ -185,7 +165,7 @@ adapter outside the database transaction. A successful payment is recorded
 before Order asks Event to confirm the hold; only a confirmed hold can produce
 the `order.confirmed` outbox message. Payment failures and expired pending
 orders persist `inventory.hold.release` commands in the Order outbox. The
-outbox worker retries those commands and reconciles stale checkout attempts.
+Order service retries those commands and reconciles stale checkout attempts.
 If a checkout returns `503` while Event is unavailable or the outcome is
 uncertain, retry with the same key so reconciliation can continue safely.
 
@@ -216,11 +196,14 @@ The RabbitMQ test publisher and consumer under `src/scripts/` are development
 helpers. The test consumer reads from the same queue as the email worker, so do
 not leave it running while processing real confirmation messages.
 
-For monitoring and the audited one-order replay procedure, see
+For deployment configuration, credential ownership, TLS, topology setup, and
+rollback guidance, see [`docs/deployment.md`](docs/deployment.md). For
+monitoring and the audited one-order replay procedure, see
 [`docs/phase-4-cutover.md`](docs/phase-4-cutover.md). The local Prometheus
-configuration scrapes Order outbox metrics, Email delivery outcomes, and
-RabbitMQ queue depth and oldest-message timestamps. RabbitMQ's Prometheus
-endpoint is exposed on `localhost:15692` for local monitoring.
+configuration scrapes all four services, including Order outbox state, Event
+hold age/conflicts/expiry, Email delivery outcomes, and RabbitMQ queue depth and
+oldest-message timestamps. RabbitMQ's Prometheus endpoint is exposed on
+`localhost:15692` for local monitoring.
 
 ## Event search
 

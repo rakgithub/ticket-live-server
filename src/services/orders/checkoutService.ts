@@ -10,7 +10,6 @@ import { checkoutAttemptsTable } from "../../db/schema/checkoutAttempts.ts";
 import { orderOutboxEventsTable } from "../../db/schema/orderOutboxEvents.ts";
 import { ordersTable } from "../../db/schema/orders.ts";
 import { paymentsTable } from "../../db/schema/payments.ts";
-import { usersTable } from "../../db/schema/users.ts";
 import { createLogger } from "../../observability/logger.ts";
 import { withTraceMetadata } from "../../observability/traceContext.ts";
 import {
@@ -28,6 +27,8 @@ export type CheckoutInput = {
   eventId: string;
   quantity: number;
 };
+
+export type CheckoutCustomer = { name: string; email: string };
 
 export class CheckoutError extends Error {
   readonly status: 400 | 404 | 409 | 500 | 503;
@@ -52,6 +53,7 @@ export async function checkout(
   userId: string,
   input: CheckoutInput,
   idempotencyKey: string,
+  customer: CheckoutCustomer,
 ): Promise<CheckoutResponse> {
   // Fail before reserving an idempotency key if the internal Event interface
   // cannot be called in this deployment.
@@ -84,14 +86,6 @@ export async function checkout(
   }
 
   try {
-    const [customer] = await db
-      .select({ name: usersTable.displayName, email: usersTable.email })
-      .from(usersTable)
-      .where(eq(usersTable.id, userId));
-    if (!customer) {
-      throw new CheckoutError("Customer account is not available", 404);
-    }
-
     const hold = await createOrRecoverHold(inventory, attempt.orderId, input);
     if (hold.state !== "active") {
       if (hold.state === "confirmed") {

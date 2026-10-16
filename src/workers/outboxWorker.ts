@@ -118,7 +118,7 @@ export async function processOutboxBatch(): Promise<number> {
           "messaging.message.id": event.id,
           "messaging.event.type": event.eventType,
           "aggregate.id": event.aggregateId,
-        }, "ticket-live-outbox-worker", 1);
+        }, "ticket-live-order-service", 1);
         try {
           await processOutboxEvent(event);
           finishSpan("ok");

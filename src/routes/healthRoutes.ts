@@ -3,6 +3,7 @@ import { pool } from "../db/client.ts";
 import { getEventServiceClient } from "../services/events/eventServiceClient.ts";
 import { renderHttpMetrics } from "../observability/metrics.ts";
 import { exportOtlpMetrics } from "../observability/otlpMetricsExporter.ts";
+import { getOrderServiceClient } from "../services/orders/orderServiceClient.ts";
 
 const healthRoutes = Router();
 
@@ -11,15 +12,17 @@ healthRoutes.get("/health/live", (_req, res) => {
 });
 
 healthRoutes.get("/health/ready", async (_req, res) => {
-  const [postgres, eventService] = await Promise.allSettled([
+  const [postgres, eventService, orderService] = await Promise.allSettled([
     pool.query("SELECT 1"),
     getEventServiceClient().readiness(),
+    getOrderServiceClient().readiness(),
   ]);
   const checks = {
     postgres: postgres.status === "fulfilled",
     eventService: eventService.status === "fulfilled" && eventService.value.status === "ready",
+    orderService: orderService.status === "fulfilled" && orderService.value,
   };
-  const ready = checks.postgres && checks.eventService;
+  const ready = checks.postgres && checks.eventService && checks.orderService;
 
   res.status(ready ? 200 : 503).json({
     status: ready ? "ready" : "not_ready",
@@ -28,29 +31,9 @@ healthRoutes.get("/health/ready", async (_req, res) => {
 });
 
 healthRoutes.get("/metrics", async (_req, res) => {
-  let outbox: { pending: number; oldestAgeSeconds: number } | undefined;
-  try {
-    const result = await pool.query<{ pending: string; oldest_age_seconds: string | null }>(`
-      SELECT
-        SUM(pending)::text AS pending,
-        GREATEST(0, EXTRACT(EPOCH FROM (NOW() - MIN(oldest_created_at))))::text AS oldest_age_seconds
-      FROM (
-        SELECT COUNT(*) AS pending, MIN(created_at) AS oldest_created_at
-        FROM order_service.outbox_events
-        WHERE processed_at IS NULL
-      ) AS pending_outboxes
-    `);
-    outbox = {
-      pending: Number(result.rows[0]?.pending ?? 0),
-      oldestAgeSeconds: Number(result.rows[0]?.oldest_age_seconds ?? 0),
-    };
-  } catch {
-    // Keep the scrape available when PostgreSQL is down; readiness reports the outage.
-  }
-
-  exportOtlpMetrics(outbox);
+  exportOtlpMetrics();
   res.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
-  res.status(200).send(renderHttpMetrics(outbox));
+  res.status(200).send(renderHttpMetrics());
 });
 
 export default healthRoutes;

@@ -33,11 +33,11 @@ paths:
     get:
       operationId: healthReadiness
       security: []
-      summary: Check API database and Event service dependencies
-      description: The public API checks its PostgreSQL dependencies and the Event service readiness endpoint.
+      summary: Check API database and service dependencies
+      description: The public API checks PostgreSQL, Event, and Order readiness endpoints.
       responses:
         '200':
-          description: PostgreSQL and Event service are available.
+          description: PostgreSQL, Event, and Order services are available.
           content:
             application/json:
               schema:
@@ -181,6 +181,47 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HttpError'
+  /internal/orders/checkout:
+    servers:
+      - url: http://localhost:4005
+    post:
+      operationId: orderServiceCheckout
+      security: [{ serviceBearerAuth: [] }]
+      summary: Run checkout for the authenticated API gateway
+      description: The public API sends an identity-verified customer snapshot. This route must stay on a private service network.
+      parameters:
+        - in: header
+          name: x-actor-user-id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 255 }
+        - in: header
+          name: x-correlation-id
+          required: false
+          schema: { type: string, format: uuid }
+        - in: header
+          name: traceparent
+          required: false
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InternalCheckoutRequest' }
+      responses:
+        '201':
+          description: Checkout is confirmed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CheckoutResponse' }
+        '400': { description: Invalid checkout request. }
+        '401': { description: Missing or invalid service credentials. }
+        '404': { description: Customer or event is unavailable. }
+        '409': { description: Capacity, payment, or idempotency conflict. }
+        '503': { description: Checkout outcome is uncertain; retry with the same Idempotency-Key. }
   /events/search:
     get:
       operationId: searchEvents
@@ -697,6 +738,18 @@ components:
           type: integer
           minimum: 1
           maximum: 10000
+    InternalCheckoutRequest:
+      type: object
+      required: [eventId, quantity, customer]
+      properties:
+        eventId: { type: string, format: uuid }
+        quantity: { type: integer, minimum: 1, maximum: 10000 }
+        customer:
+          type: object
+          required: [name, email]
+          properties:
+            name: { type: string, minLength: 1, maxLength: 255 }
+            email: { type: string, format: email }
     CheckoutResponse:
       type: object
       required: [event, order, payment]
@@ -826,10 +879,11 @@ components:
         status: { type: string, enum: [ready, not_ready] }
         checks:
           type: object
-          required: [postgres, eventService]
+          required: [postgres, eventService, orderService]
           properties:
             postgres: { type: boolean }
             eventService: { type: boolean }
+            orderService: { type: boolean }
     EmailDeliveryStatus:
       type: string
       enum: [queued, sending, accepted_by_provider, delivered, bounced, failed, simulated]

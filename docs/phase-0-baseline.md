@@ -1,4 +1,4 @@
-# Phase 0 baseline
+# Phase 0 baseline (historical snapshot)
 
 This records the current public behavior and data seams before the Order service is extracted. It does not move business code or change the checkout workflow.
 
@@ -21,9 +21,16 @@ The local PostgreSQL bootstrap creates these schema owners and sets each login's
 
 Set the `TICKETLIVE_*_DB_PASSWORD` values in `.env` before using these logins. The example values are local development credentials only. The bootstrap starts service schemas empty; after the Phase 1.1 storage migration, `order_service` contains Order's tables. The remaining service schemas still have no access to the existing tables in `public`.
 
-The temporary `ticketlive_public_api` login is a compatibility credential, not a service ownership boundary. It cannot create schemas or own tables. After Phase 1.1 it can access both the legacy `public` tables and Order's tables in `order_service` so the still-integrated app can run.
+At the Phase 0 baseline, the temporary `ticketlive_public_api` login was a
+compatibility credential, not a service ownership boundary. It could not create
+schemas or own tables. The Order HTTP extraction now revokes that login's
+access to `order_service`; only `ticketlive_order` can access Order's tables.
 
-The current app uses the dedicated `ticketlive_public_api` compatibility login through `DATABASE_URL`. Checkout still updates Event capacity and Order records within the same application transaction, across `public` and `order_service`. `MIGRATION_DATABASE_URL` remains a separate migration/admin credential. The API process and Event inventory boundary will be separated in later Phase 1 work.
+The public API uses `ticketlive_public_api` through `DATABASE_URL` for identity
+reads. Order uses its own database login and owns checkout records. The API
+loads a minimal customer snapshot and passes it to Order through an authenticated
+service request. `MIGRATION_DATABASE_URL` remains a separate migration/admin
+credential.
 
 ## Data ownership and write inventory
 
@@ -96,7 +103,6 @@ details returns `409`; a concurrent repeat while the first request is still
 running also returns `409` and can be retried with the same key. The checkout
 endpoint now requires `Idempotency-Key`.
 
-This storage step does not extract an independent Order process yet. The current
-API still uses its compatibility database login and still performs the existing
-Event capacity update; the Event-owned inventory interface and Order checkout
-state machine are later steps in Phase 1.
+At the Phase 1.1 storage checkpoint this had not extracted an independent Order
+process. The later Phase 1 work moved checkout behind Order's authenticated
+HTTP interface and moved Event capacity operations behind Event's hold API.

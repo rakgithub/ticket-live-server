@@ -2,6 +2,7 @@
   "name": "@ticket-live/order-service",
   "private": true,
   "type": "module",
+  "scripts": { "start": "tsx src/main.ts" },
   "dependencies": {
     "@ticket-live/contracts": "workspace:*"
   }

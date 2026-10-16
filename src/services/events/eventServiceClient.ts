@@ -5,7 +5,7 @@ import {
   HttpErrorSchema,
 } from "@ticket-live/contracts";
 import { z } from "zod";
-import { env } from "../../config/env.ts";
+import { env, serviceCredential } from "../../config/env.ts";
 import { getTraceContext } from "../../observability/traceContext.ts";
 
 const EventSearchCandidatesSchema = z.object({
@@ -52,14 +52,15 @@ export class EventServiceClient {
     return EventCardsSchema.parse(await this.request("GET", `/internal/event-cards?${query}`)).cards;
   }
   private async request(method: "GET" | "POST", path: string, body?: unknown, actorUserId?: string): Promise<unknown> {
-    if (!env.INTERNAL_SERVICE_TOKEN) throw new EventServiceError("Event service authentication is not configured", 503);
+    const serviceToken = serviceCredential("public-api-event");
+    if (!serviceToken) throw new EventServiceError("Event service authentication is not configured", 503);
     const trace = getTraceContext();
     let response: Response;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 3_000);
     try {
       response = await fetch(`${this.baseUrl}${path}`, { method, headers: {
-        authorization: `Bearer ${env.INTERNAL_SERVICE_TOKEN}`,
+        authorization: `Bearer ${serviceToken}`,
         ...(actorUserId ? { "x-actor-user-id": actorUserId } : {}),
         ...(body ? { "content-type": "application/json" } : {}),
         ...(trace ? { "x-correlation-id": trace.correlationId, traceparent: trace.traceparent } : {}),

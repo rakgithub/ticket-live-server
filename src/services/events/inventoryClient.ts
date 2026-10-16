@@ -7,7 +7,7 @@ import {
   type InventoryHoldResponse,
 } from "@ticket-live/contracts";
 import { z } from "zod";
-import { env } from "../../config/env.ts";
+import { env, serviceCredential } from "../../config/env.ts";
 import { getTraceContext } from "../../observability/traceContext.ts";
 
 const MAX_RETRIES = 2;
@@ -172,7 +172,8 @@ let configuredClient: InventoryClient | undefined;
 
 export function getInventoryClient(): InventoryClient {
   if (configuredClient) return configuredClient;
-  if (!env.INTERNAL_SERVICE_TOKEN) {
+  const serviceToken = serviceCredential("order-event");
+  if (!serviceToken) {
     throw new InventoryServiceError(
       "Inventory service authentication is not configured",
       503,
@@ -180,7 +181,7 @@ export function getInventoryClient(): InventoryClient {
   }
   configuredClient = new InventoryClient({
     baseUrl: env.INVENTORY_SERVICE_URL,
-    serviceToken: env.INTERNAL_SERVICE_TOKEN,
+    serviceToken,
   });
   return configuredClient;
 }

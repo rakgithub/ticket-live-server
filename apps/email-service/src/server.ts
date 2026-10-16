@@ -8,11 +8,13 @@ import { createLogger } from "../../../src/observability/logger.ts";
 import { getDeliveryByNotificationKey, getEmailDeliveryMetricRows } from "./deliveryStore.ts";
 import { renderEmailMetrics } from "./metrics.ts";
 import { startEmailWorker } from "./emailWorker.ts";
+import { httpObservabilityMiddleware } from "../../../src/observability/httpMiddleware.ts";
 
 const logger = createLogger("ticket-live-email-service");
 const app = express();
 const worker = startEmailWorker();
 
+app.use(httpObservabilityMiddleware);
 app.use(express.json({ limit: "100kb" }));
 app.use("/internal", requireInternalServiceAuth);
 

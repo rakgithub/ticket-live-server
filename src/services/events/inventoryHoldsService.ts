@@ -9,6 +9,13 @@ import {
 
 type InventoryTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
+let capacityConflictsTotal = 0;
+let expiredHoldsTotal = 0;
+
+export function getInventoryHoldCounters() {
+  return { capacityConflictsTotal, expiredHoldsTotal };
+}
+
 const holdSelection = {
   holdId: inventoryHoldsTable.holdId,
   orderId: inventoryHoldsTable.orderId,
@@ -57,6 +64,7 @@ function throwCreateOutcome(outcome: CreateHoldOutcome) {
       throw new InventoryHoldError("Event is not available", 404);
     }
     if (outcome.error === "capacity") {
+      capacityConflictsTotal += 1;
       throw new InventoryHoldError("Not enough seats are available", 409);
     }
     throw new InventoryHoldError(
@@ -374,6 +382,7 @@ async function expireActiveHoldsForEvent(
     .returning({ quantity: inventoryHoldsTable.quantity });
 
   const expiredQuantity = expired.reduce((total, hold) => total + hold.quantity, 0);
+  expiredHoldsTotal += expired.length;
   if (expiredQuantity > 0) {
     await tx
       .update(eventsTable)

@@ -1,6 +1,7 @@
 export {
   CheckoutRequestSchema,
   CheckoutIdempotencyKeySchema,
+  InternalCheckoutRequestSchema,
   CheckoutResponseSchema,
   InventoryHoldCreateRequestSchema,
   InventoryHoldIdempotencyKeySchema,
@@ -17,6 +18,7 @@ export {
   EmailDeliveryResponseSchema,
   type CheckoutRequest,
   type CheckoutIdempotencyKey,
+  type InternalCheckoutRequest,
   type CheckoutResponse,
   type InventoryHoldCreateRequest,
   type InventoryHoldIdempotencyKey,

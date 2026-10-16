@@ -1,6 +1,6 @@
 # Ticket Live: phased migration to three microservices
 
-Status: Phases 0–3 and Phase 4 code/runbook implemented; live legacy-queue drain and deployment cutover sign-off remain pending. Updated 16 October 2026.
+Status: Phases 0–4 code/runbooks and the Section 10 deployment baseline are implemented; live queue drain, production Email provider integration, and deployment cutover sign-off remain pending. Updated 16 October 2026.
 
 ## 1. Outcome and decisions
 
@@ -67,7 +67,7 @@ Order owns `orders`, a checkout state/attempt table, its local `outbox_events`, 
 
 ### 5.2 Temporary Event-owned inventory interface
 
-Before Order becomes the sole order writer, add private endpoints or an internal module façade to the **remaining app**, which still owns `events`: `POST /internal/events/{eventId}/holds`, `POST /internal/holds/{holdId}/confirm`, `POST /internal/holds/{holdId}/release`, and `GET /internal/holds/{holdId}`. These endpoints later move unchanged to Event service in Phase 2. Authenticate service callers; use deadlines, small bounded retries for transient failures, and stable idempotency keys. Do not expose them to browsers. The HTTP interface uses a shared `INTERNAL_SERVICE_TOKEN`; its client has a two-second default total deadline (configurable up to five seconds) and retries transient failures at most twice, and hold creation uses the stable `orderId` as its idempotency key and `holdId`. That makes `GET /internal/holds/{holdId}` usable to resolve a lost create response when the caller knows its order ID.
+Before Order becomes the sole order writer, add private endpoints or an internal module façade to the **remaining app**, which still owns `events`: `POST /internal/events/{eventId}/holds`, `POST /internal/holds/{holdId}/confirm`, `POST /internal/holds/{holdId}/release`, and `GET /internal/holds/{holdId}`. These endpoints later move unchanged to Event service in Phase 2. Authenticate each service caller with a distinct credential; use deadlines, small bounded retries for transient failures, and stable idempotency keys. Do not expose them to browsers. The Order inventory client has a two-second default total deadline (configurable up to five seconds) and retries transient failures at most twice, and hold creation uses the stable `orderId` as its idempotency key and `holdId`. That makes `GET /internal/holds/{holdId}` usable to resolve a lost create response when the caller knows its order ID.
 
 Create an `inventory_holds` table beside `events`, with `hold_id`, `order_id` (unique), `event_id`, quantity, unit price, currency, state (`active|confirmed|released|expired`), expiry, and timestamps. Under one PostgreSQL transaction, atomically check active event and available capacity, increment held capacity, and insert the hold. Preserve the current capacity invariant by defining `reserved_quantity` as **active holds plus confirmed sold units** during migration, or explicitly split into `held_quantity` and `sold_quantity` with a checked migration. Confirmation must keep total occupied capacity unchanged; release/expiry decrements only an active hold. Repeated `confirm`/`release` calls must be safe. Return `409` for exhausted stock and preserve `404` for unavailable events. The temporary interface follows this counter invariant and snapshots price, currency, and event start time on each hold. An Event-side sweep expires holds in bounded batches; the integrated API polls every two seconds by default.
 
@@ -149,15 +149,22 @@ The executable Zod contracts are in [`packages/contracts/src/messages.ts`](../pa
 
 | Concern | Minimum implementation |
 | --- | --- |
-| Local stack | Compose services for PostgreSQL, Elasticsearch, RabbitMQ, and the three service applications. Declare health checks and explicit queue setup; avoid relying on broker auto-creation in production. |
-| Deployability | One build/image and independent rollout per service; migrations run before code that needs them; backward-compatible schema changes deployed before removal. |
-| Credentials | Separate DB users, broker principals/ACLs, and secrets per service; TLS for inter-service/broker traffic in production. Internal endpoints authenticate service identity. |
-| Public routing | Existing Express API routes to extracted services during migration. Add a gateway/BFF only when routing, auth, or response composition warrants an independent deployable component. Avoid duplicating business authorization: services check resource ownership. |
-| Reliability | Timeouts, bounded retries with jitter, idempotency, outbox, DLQ/quarantine, reconciliation jobs, and documented manual recovery. Avoid synchronous chains for email delivery. |
-| Observability | HTTP latency/error rates, hold conflicts/expiry, order state age, outbox age, RabbitMQ queue depth/DLQ, provider delivery outcomes, traces by correlation ID. |
-| Security/privacy | JWT issuer/audience checks, service auth, least-privilege DB roles, encrypted secrets, payload minimization, retention/deletion policy for personal data. |
-| Verification | Contract checks; integration runs with actual PostgreSQL and brokers; race/failure injection for last-ticket checkout, retries, dropped responses, service outage, broker outage, and crash after publish/before ack. |
-| Rollback | Per-phase traffic switch, data checkpoint, owner, and reconciliation steps. After a new service takes writes, rollback needs data replay/reconciliation before the old writer can resume. |
+| Local stack | `compose.yaml` starts PostgreSQL, Elasticsearch, RabbitMQ, and four app processes. App health checks gate API startup; role bootstrap and migrations are explicit steps. RabbitMQ topology definitions are checked in, and local auto-declaration is disabled by production configuration. |
+| Deployability | A single provider-neutral Docker image selects its process with `TICKETLIVE_SERVICE`; services can be rolled out independently. Run Drizzle migrations as a separate job before app rollout and use expand/contract changes. |
+| Credentials | Public API, Order, Event, and Email have separate PostgreSQL credentials. API-to-Order, API-to-Event, Order-to-Event, and Email internal endpoints use separate tokens. Order and Email have separate RabbitMQ principals; production ACLs are in `docs/deployment.md`. |
+| Public routing | The Express API remains the gateway for JWT verification and customer identity lookup. It calls the Order HTTP endpoint with an authenticated actor ID and minimized customer snapshot. Event checks event ownership for resource mutations. |
+| Reliability | Checkout retains a 45-second configurable gateway deadline, stable idempotency key, outbox, and Order reconciliation. Inventory keeps its bounded retry policy; Email remains asynchronous with retry and dead-letter queues. Production broker topology is provisioned before rollout. |
+| Observability | Each service exposes HTTP histograms and readiness. Order exposes unresolved order age, outbox age, and inventory reconciliation mismatch counters; Event exposes active hold age/count, capacity conflicts, and hold expiries; Email exposes delivery outcomes; Prometheus scrapes service and RabbitMQ metrics. Trace context crosses HTTP and message boundaries. |
+| Security/privacy | Public JWT issuer/audience checks remain at the API boundary. Runtime database and broker identities are separated, local secrets use environment configuration, production rejects shared internal tokens and automatic topology creation, and checkout forwards only customer name/email. Production TLS terminates at ingress/service networking and uses HTTPS, PostgreSQL TLS, and AMQPS. |
+| Verification | Run typecheck, lint, contract/unit tests, Compose configuration checks, and integration tests against PostgreSQL and RabbitMQ. Exercise concurrent capacity checkout, same-key retry, lost Order response, dependency outage, publisher confirms, and Email retry/DLQ behavior before a production traffic switch. |
+| Rollback | Record per-service owner, image digest, migration position, data snapshot, traffic switch, and reconciliation owner. Existing phase runbooks specify the checkpoint and replay steps; after Order takes writes, replay or reconcile accepted writes before restoring an older writer. |
+
+The implementation details, runtime variable matrix, RabbitMQ ACL guidance,
+network requirements, rollout sequence, and current production limitations are
+in [`deployment.md`](deployment.md). The local fake Email provider is not a
+production provider; production Email rollout remains blocked until its provider
+integration is implemented. Keep one Order replica active until outbox row
+claims support concurrent relays.
 
 ## 11. Implementation sequence and completion criteria
 

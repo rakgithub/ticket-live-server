@@ -3,8 +3,12 @@ import { createLogger } from "./logger.ts";
 import { observeHttpRequest } from "./metrics.ts";
 import { createHttpTraceContext, runWithTraceContext } from "./traceContext.ts";
 import { startSpan } from "./traceExporter.ts";
+import { env } from "../config/env.ts";
 
-const logger = createLogger("ticket-live-public-api");
+const logger = createLogger("ticket-live-http");
+const serviceName = env.TICKETLIVE_SERVICE === "public-api"
+  ? "ticket-live-public-api"
+  : `ticket-live-${env.TICKETLIVE_SERVICE}-service`;
 
 export const httpObservabilityMiddleware: RequestHandler = (req, res, next) => {
   const context = createHttpTraceContext({
@@ -14,7 +18,7 @@ export const httpObservabilityMiddleware: RequestHandler = (req, res, next) => {
   });
   const finishSpan = startSpan(context, "http.server.request", {
     "http.request.method": req.method,
-  });
+  }, serviceName);
   const startTime = process.hrtime.bigint();
 
   res.setHeader("x-correlation-id", context.correlationId);

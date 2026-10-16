@@ -3,9 +3,9 @@ groups:
     rules:
       - alert: TicketLivePublicApiHighServerErrorRate
         expr: |
-          sum(rate(http_server_requests_total{status_class="5xx"}[5m]))
+          sum(rate(http_server_requests_total{job="ticket-live-public-api",status_class="5xx"}[5m]))
           /
-          clamp_min(sum(rate(http_server_requests_total[5m])), 1)
+          clamp_min(sum(rate(http_server_requests_total{job="ticket-live-public-api"}[5m])), 1)
           > 0.01
         for: 10m
         labels:
@@ -35,6 +35,15 @@ groups:
         annotations:
           summary: An unpublished outbox row is older than one minute
           description: Inspect outbox event IDs, attempts, and last_error before replay.
+
+      - alert: TicketLiveOrderStateStuck
+        expr: ticketlive_orders_oldest_unresolved_age_seconds > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: An Order has remained unresolved for more than five minutes
+          description: Check checkout attempts, payment state, Event hold state, and reconciliation logs.
 
       - alert: TicketLiveActiveHoldStuck
         expr: ticketlive_holds_oldest_active_age_seconds > 300
@@ -71,6 +80,24 @@ groups:
         annotations:
           summary: Email service metrics are unavailable to Prometheus
           description: Check Email readiness, database access, and the metrics endpoint.
+
+      - alert: TicketLiveOrderMetricsUnavailable
+        expr: up{job="ticket-live-order-service"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Order service metrics are unavailable to Prometheus
+          description: Check Order readiness, database access, and the metrics endpoint.
+
+      - alert: TicketLiveEventMetricsUnavailable
+        expr: up{job="ticket-live-event-service"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Event service metrics are unavailable to Prometheus
+          description: Check Event readiness, its database/search access, and the metrics endpoint.
 
       - alert: TicketLiveEmailQueueOldMessage
         expr: time() - rabbitmq_detailed_queue_head_message_timestamp{queue=~"email.send.v1|email.send.v1.retry"} > 120
@@ -138,7 +165,7 @@ groups:
           description: Reconcile with the provider before replaying to avoid sending a duplicate confirmation.
 
       - alert: TicketLivePaymentHoldMismatch
-        expr: ticketlive_payment_hold_mismatch_total > 0
+        expr: increase(ticketlive_payment_hold_mismatch_total[5m]) > 0
         for: 1m
         labels:
           severity: critical

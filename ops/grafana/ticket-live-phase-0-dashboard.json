@@ -109,6 +109,25 @@
         { "expr": "ticketlive_email_delivery_attempts_total", "legendFormat": "{{provider}} attempts", "refId": "B" },
         { "expr": "ticketlive_email_active_retries", "legendFormat": "{{provider}} active retries", "refId": "C" }
       ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Oldest unresolved Order state (seconds)",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 40 },
+      "targets": [
+        { "expr": "ticketlive_orders_oldest_unresolved_age_seconds", "legendFormat": "order age", "refId": "A" }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Inventory hold conflicts and expiries",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 40 },
+      "targets": [
+        { "expr": "rate(ticketlive_inventory_hold_capacity_conflicts_total[5m])", "legendFormat": "capacity conflicts/sec", "refId": "A" },
+        { "expr": "rate(ticketlive_inventory_holds_expired_total[5m])", "legendFormat": "expired holds/sec", "refId": "B" }
+      ]
     }
   ],
   "annotations": { "list": [] },
