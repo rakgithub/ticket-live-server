@@ -2,12 +2,15 @@ import "dotenv/config";
 import { z } from "zod";
 
 const envSchema = z.object({
+  TICKETLIVE_SERVICE: z.enum(["public-api", "event"]).default("public-api"),
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
   PORT: z.coerce.number().int().min(1).max(65_535).default(4002),
+  EVENT_SERVICE_PORT: z.coerce.number().int().min(1).max(65_535).default(4003),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
-  DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
+  DATABASE_URL: z.string().min(1).optional(),
+  EVENT_SERVICE_DATABASE_URL: z.string().min(1).optional(),
   ELASTICSEARCH_URL: z.url("ELASTICSEARCH_URL must be a valid URL"),
   GEMINI_API_KEY: z
     .string()
@@ -16,7 +19,7 @@ const envSchema = z.object({
   EVENT_CHAT_MODEL: z.string().trim().min(1).default("gemini-3.8-flash"),
   EVENT_CHAT_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(30_000),
   EVENT_CHAT_MAX_ACTIVE_PER_USER: z.coerce.number().int().min(1).max(10).default(2),
-  AMQP_URL: z.string().min(1, "AMQP_URL is required"),
+  AMQP_URL: z.string().default(""),
   OTEL_EXPORTER_OTLP_ENDPOINT: z
     .string()
     .optional()
@@ -29,7 +32,8 @@ const envSchema = z.object({
     .int()
     .min(100)
     .default(2_000),
-  JWT_SECRET: z.string().min(1, "JWT_SECRET is required"),
+  INVENTORY_RECONCILIATION_INTERVAL_MS: z.coerce.number().int().min(1_000).default(60_000),
+  JWT_SECRET: z.string().default(""),
   INTERNAL_SERVICE_TOKEN: z
     .string()
     .regex(
@@ -37,7 +41,8 @@ const envSchema = z.object({
       "INTERNAL_SERVICE_TOKEN must be at least 32 printable ASCII bytes",
     )
     .optional(),
-  INVENTORY_SERVICE_URL: z.url().default("http://localhost:4002"),
+  INVENTORY_SERVICE_URL: z.url().default("http://localhost:4003"),
+  EVENT_SERVICE_URL: z.url().default("http://localhost:4003"),
   ACCESS_TOKEN_TTL: z
     .string()
     .regex(/^\d+[smhd]$/, "ACCESS_TOKEN_TTL must look like 15m, 1h, or 1d")
@@ -54,7 +59,23 @@ const envSchema = z.object({
     .string()
     .default("http://localhost:3000,http://localhost:5173"),
 }).superRefine((values, context) => {
-  if (values.NODE_ENV === "production" && !process.env.CORS_ORIGINS) {
+  if (values.TICKETLIVE_SERVICE === "event" && !values.EVENT_SERVICE_DATABASE_URL) {
+    context.addIssue({
+      code: "custom",
+      path: ["EVENT_SERVICE_DATABASE_URL"],
+      message: "EVENT_SERVICE_DATABASE_URL is required for the Event service",
+    });
+  }
+  if (values.TICKETLIVE_SERVICE === "public-api" && !values.DATABASE_URL) {
+    context.addIssue({ code: "custom", path: ["DATABASE_URL"], message: "DATABASE_URL is required for the public API" });
+  }
+  if (values.TICKETLIVE_SERVICE === "public-api" && !values.JWT_SECRET) {
+    context.addIssue({ code: "custom", path: ["JWT_SECRET"], message: "JWT_SECRET is required for the public API" });
+  }
+  if (values.TICKETLIVE_SERVICE === "public-api" && !values.AMQP_URL) {
+    context.addIssue({ code: "custom", path: ["AMQP_URL"], message: "AMQP_URL is required for the public API" });
+  }
+  if (values.NODE_ENV === "production" && values.TICKETLIVE_SERVICE === "public-api" && !process.env.CORS_ORIGINS) {
     context.addIssue({
       code: "custom",
       path: ["CORS_ORIGINS"],
@@ -79,7 +100,10 @@ if (!parsedEnv.success) {
   throw new Error(`Invalid environment configuration: ${details}`);
 }
 
-if (new TextEncoder().encode(parsedEnv.data.JWT_SECRET).length < 32) {
+if (
+  parsedEnv.data.TICKETLIVE_SERVICE === "public-api" &&
+  new TextEncoder().encode(parsedEnv.data.JWT_SECRET).length < 32
+) {
   throw new Error(
     "Invalid environment configuration: JWT_SECRET must be at least 32 bytes",
   );

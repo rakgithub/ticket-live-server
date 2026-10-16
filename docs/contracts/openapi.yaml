@@ -31,10 +31,11 @@ paths:
     get:
       operationId: healthReadiness
       security: []
-      summary: Check API database and search dependencies
+      summary: Check API database and Event service dependencies
+      description: The public API checks its PostgreSQL dependencies and the Event service readiness endpoint.
       responses:
         '200':
-          description: PostgreSQL and Elasticsearch are available.
+          description: PostgreSQL and Event service are available.
           content:
             application/json:
               schema:
@@ -217,7 +218,210 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HttpError'
+  /internal/events:
+    servers:
+      - url: http://localhost:4003
+    get:
+      operationId: eventServiceListEvents
+      security: [{ serviceBearerAuth: [] }]
+      summary: List Event-owned catalog entries for trusted callers
+      responses:
+        '200':
+          description: Non-deleted events ordered by start time.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events]
+                properties:
+                  events: { type: array, items: { $ref: '#/components/schemas/Event' } }
+        '401': { description: Missing or invalid service credentials. }
+    post:
+      operationId: eventServiceCreateEvent
+      security: [{ serviceBearerAuth: [] }]
+      summary: Create an Event-owned catalog entry
+      parameters:
+        - in: header
+          name: x-actor-user-id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateEventRequest' }
+      responses:
+        '201':
+          description: Event created with its search-index outbox row.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [event]
+                properties:
+                  event: { $ref: '#/components/schemas/Event' }
+        '400': { description: Invalid event input or actor ID. }
+        '401': { description: Missing or invalid service credentials. }
+  /internal/events/search:
+    servers:
+      - url: http://localhost:4003
+    get:
+      operationId: eventServiceSearchEvents
+      security: [{ serviceBearerAuth: [] }]
+      summary: Search the Event-owned Elasticsearch index
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 200 }
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        '200':
+          description: Ranked documents from the Event search index.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events]
+                properties:
+                  events: { type: array, items: { $ref: '#/components/schemas/EventSearchResult' } }
+        '401': { description: Missing or invalid service credentials. }
+  /internal/events/{eventId}:
+    servers:
+      - url: http://localhost:4003
+    patch:
+      operationId: eventServiceUpdateEvent
+      security: [{ serviceBearerAuth: [] }]
+      summary: Update an Event-owned catalog entry
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: x-actor-user-id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                name: { type: string, minLength: 1, maxLength: 255 }
+                description: { type: string, minLength: 1 }
+                location: { type: string, minLength: 1, maxLength: 255 }
+                minPeople: { type: integer, minimum: 1 }
+                maxPeople: { type: integer, minimum: 1 }
+                ticketPriceCents: { type: integer, minimum: 0 }
+                currencyCode: { type: string, pattern: '^[A-Za-z]{3}$' }
+                servesAlcohol: { type: boolean }
+                startsAt: { type: string, format: date-time }
+      responses:
+        '200': { description: Updated Event with an incremented index version. }
+        '400': { description: Invalid event input or actor ID. }
+        '409': { description: The update would violate event capacity constraints. }
+        '401': { description: Missing or invalid service credentials. }
+        '404': { description: Event was not found for the supplied actor. }
+    delete:
+      operationId: eventServiceDeleteEvent
+      security: [{ serviceBearerAuth: [] }]
+      summary: Soft-delete an Event-owned catalog entry
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: x-actor-user-id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Event deletion was committed to the Event outbox. }
+        '401': { description: Missing or invalid service credentials. }
+        '404': { description: Event was not found for the supplied actor. }
+  /internal/events/{eventId}/cancel:
+    servers:
+      - url: http://localhost:4003
+    post:
+      operationId: eventServiceCancelEvent
+      security: [{ serviceBearerAuth: [] }]
+      summary: Cancel an Event and prevent new inventory holds
+      parameters:
+        - in: path
+          name: eventId
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: x-actor-user-id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Event cancellation was committed to the Event outbox. }
+        '401': { description: Missing or invalid service credentials. }
+        '404': { description: Event was not found for the supplied actor. }
+  /internal/event-search:
+    servers:
+      - url: http://localhost:4003
+    get:
+      operationId: eventServiceSearchCandidates
+      security: [{ serviceBearerAuth: [] }]
+      summary: Return ranked candidate IDs for event chat
+      parameters:
+        - in: query
+          name: text
+          schema: { type: string, minLength: 1, maxLength: 120 }
+        - in: query
+          name: location
+          schema: { type: string, minLength: 1, maxLength: 120 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 50 }
+      responses:
+        '200':
+          description: Candidate event IDs in search order.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [candidates]
+                properties:
+                  candidates:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, score]
+                      properties:
+                        id: { type: string, format: uuid }
+                        score: { type: [number, 'null'] }
+        '401': { description: Missing or invalid service credentials. }
+  /internal/event-cards:
+    servers:
+      - url: http://localhost:4003
+    get:
+      operationId: eventServiceHydrateChatCards
+      security: [{ serviceBearerAuth: [] }]
+      summary: Refresh ranked event candidates from Event-owned data
+      parameters:
+        - in: query
+          name: ids
+          required: true
+          description: Comma-separated event UUIDs in search rank order.
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 10 }
+      responses:
+        '200': { description: Fresh, active event cards in candidate order. }
+        '401': { description: Missing or invalid service credentials. }
   /internal/events/{eventId}/holds:
+    servers:
+      - url: http://localhost:4003
     post:
       operationId: createInventoryHold
       security:
@@ -282,6 +486,8 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/HttpError' }
   /internal/holds/{holdId}/confirm:
+    servers:
+      - url: http://localhost:4003
     post:
       operationId: confirmInventoryHold
       security:
@@ -329,6 +535,8 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/HttpError' }
   /internal/holds/{holdId}/release:
+    servers:
+      - url: http://localhost:4003
     post:
       operationId: releaseInventoryHold
       security:
@@ -376,6 +584,8 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/HttpError' }
   /internal/holds/{holdId}:
+    servers:
+      - url: http://localhost:4003
     get:
       operationId: getInventoryHold
       security:
@@ -569,7 +779,7 @@ components:
         status: { type: string, enum: [ready, not_ready] }
         checks:
           type: object
-          required: [postgres, elasticsearch]
+          required: [postgres, eventService]
           properties:
             postgres: { type: boolean }
-            elasticsearch: { type: boolean }
+            eventService: { type: boolean }

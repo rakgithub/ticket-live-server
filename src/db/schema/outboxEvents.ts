@@ -4,13 +4,15 @@ import {
   index,
   integer,
   jsonb,
-  pgTable,
+  pgSchema,
   text,
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
 
-export const outboxEventsTable = pgTable(
+const eventSchema = pgSchema("event_service");
+
+export const outboxEventsTable = eventSchema.table(
   "outbox_events",
   {
     id: uuid("id").defaultRandom().primaryKey(),
@@ -22,11 +24,14 @@ export const outboxEventsTable = pgTable(
       .defaultNow(),
     processedAt: timestamp("processed_at", { withTimezone: true }),
     attempts: integer("attempts").notNull().default(0),
+    availableAt: timestamp("available_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     lastError: text("last_error"),
   },
   (table) => [
     check("outbox_events_attempts_nonnegative", sql`${table.attempts} >= 0`),
-    index("outbox_events_pending_idx").on(table.processedAt, table.createdAt),
+    index("outbox_events_pending_idx").on(table.processedAt, table.availableAt, table.createdAt),
   ],
 );
 

@@ -13,11 +13,9 @@ import {
   eventSearchIntentSchema,
   normalizeEventSearchIntent,
 } from "../services/chat/eventSearchCriteria.ts";
-import { getEventChatCards, type EventChatCard } from "../services/events/eventsService.ts";
-import {
-  searchEventCandidates,
-  type EventSearchCandidate,
-} from "../services/events/eventsSearchService.ts";
+import { getEventServiceClient } from "../services/events/eventServiceClient.ts";
+import type { EventChatCard } from "../services/events/eventsService.ts";
+import type { EventSearchCandidate } from "../services/events/eventsSearchService.ts";
 
 const logger = createLogger("ticket-live-public-api");
 
@@ -92,16 +90,14 @@ const nodes = {
   },
 
   searchCandidates: async (state: typeof EventDiscoveryState.State) => {
-    const candidates = await searchEventCandidates(state.criteria, {
-      limit: state.limit,
-    });
+    const candidates = await getEventServiceClient().searchCandidates(state.criteria, state.limit);
     return { candidates };
   },
 
   hydrateCards: async (state: typeof EventDiscoveryState.State) => {
-    const cards = await getEventChatCards(
+    const cards = await getEventServiceClient().getCards(
       state.candidates.map(({ id }) => id),
-      { limit: state.limit },
+      state.limit,
     );
     return {
       cards,

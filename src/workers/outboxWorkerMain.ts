@@ -1,5 +1,4 @@
 import { pool } from "../db/client.ts";
-import { elasticsearch } from "../search/client.ts";
 import { createLogger } from "../observability/logger.ts";
 import { startOutboxWorker } from "./outboxWorker.ts";
 
@@ -17,10 +16,7 @@ async function shutdown(signal: "SIGINT" | "SIGTERM"): Promise<void> {
 
   await stopOutboxWorker();
 
-  const results = await Promise.allSettled([
-    pool.end(),
-    elasticsearch.close(),
-  ]);
+  const results = await Promise.allSettled([pool.end()]);
 
   for (const result of results) {
     if (result.status === "rejected") {

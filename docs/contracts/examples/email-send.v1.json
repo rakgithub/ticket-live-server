@@ -7,6 +7,12 @@
   "recipient": "customer@example.com",
   "data": {
     "orderId": "e637ca0a-0b5f-42ce-a070-bfa9c05aaf1a",
-    "eventName": "Example Concert"
+    "customerName": "Example Customer",
+    "eventName": "Example Concert",
+    "eventLocation": "Berlin",
+    "eventStartsAt": "2026-11-13T19:00:00Z",
+    "quantity": 2,
+    "totalAmountCents": 8000,
+    "currencyCode": "EUR"
   }
 }

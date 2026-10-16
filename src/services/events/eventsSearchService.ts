@@ -86,7 +86,7 @@ export async function searchEventCandidates(
       timeout: "3s",
       _source: false,
       track_total_hits: false,
-      query: { bool: { must, filter: filters } },
+      query: { bool: { must, filter: filters, must_not: [{ term: { isDeleted: true } }] } },
       sort: [{ _score: { order: "desc" } }, { startsAt: { order: "asc" } }],
     });
 
@@ -99,27 +99,33 @@ export async function searchEventCandidates(
 }
 
 export async function searchEvents({ query, limit }: SearchEventsInput) {
-  const response = await elasticsearch.search<EventSearchDocument>({
-    index: eventsIndexName,
-    size: limit,
-    query: {
-      bool: {
-        must: [
-          {
-            multi_match: {
-              query,
-              fields: ["name^3", "description", "location^2"],
-              type: "best_fields",
-              operator: "and",
-              fuzziness: "AUTO",
+  let response: Awaited<ReturnType<typeof elasticsearch.search<EventSearchDocument>>>;
+  try {
+    response = await elasticsearch.search<EventSearchDocument>({
+      index: eventsIndexName,
+      size: limit,
+      query: {
+        bool: {
+          must: [
+            {
+              multi_match: {
+                query,
+                fields: ["name^3", "description", "location^2"],
+                type: "best_fields",
+                operator: "and",
+                fuzziness: "AUTO",
+              },
             },
-          },
-        ],
-        filter: [{ term: { isCancelled: false } }],
+          ],
+          filter: [{ term: { isCancelled: false } }],
+          must_not: [{ term: { isDeleted: true } }],
+        },
       },
-    },
-    sort: ["_score", { startsAt: { order: "asc" } }],
-  });
+      sort: ["_score", { startsAt: { order: "asc" } }],
+    });
+  } catch (error) {
+    throw new EventSearchUnavailableError(error);
+  }
 
   return response.hits.hits.flatMap((hit) => {
     if (!hit._source) return [];

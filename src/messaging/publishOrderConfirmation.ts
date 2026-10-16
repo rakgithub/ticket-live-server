@@ -1,35 +1,51 @@
 import amqp from "amqplib";
 import {
-  OrderConfirmedV1Schema,
-  type OrderConfirmedV1,
+  EmailSendV1Schema,
+  type EmailSendV1,
 } from "@ticket-live/contracts";
 import { env } from "../config/env.ts";
 import { getTraceContext } from "../observability/traceContext.ts";
 
 export const orderConfirmationQueueName = "booking-confirmation-email";
+export const emailSendExchangeName = "ticket-live.email";
+export const emailSendQueueName = "email.send.v1";
+const emailSendRoutingKey = "email.send.v1";
 
-export type OrderConfirmationMessage = OrderConfirmedV1;
+async function assertEmailTopology(channel: amqp.ConfirmChannel): Promise<void> {
+  await channel.assertExchange(emailSendExchangeName, "direct", { durable: true });
+  await channel.assertQueue(emailSendQueueName, { durable: true });
+  await channel.bindQueue(emailSendQueueName, emailSendExchangeName, emailSendRoutingKey);
+}
 
-export async function publishOrderConfirmation(
-  message: OrderConfirmationMessage,
+/** Publishes the temporary Order-to-Email command through a routed exchange. */
+export async function publishEmailSendCommand(
+  message: EmailSendV1,
 ): Promise<void> {
-  const validatedMessage = OrderConfirmedV1Schema.parse(message);
+  const validatedMessage = EmailSendV1Schema.parse(message);
   const traceContext = getTraceContext();
   const connection = await amqp.connect(env.AMQP_URL);
   const channel = await connection.createConfirmChannel();
+  let returned: Error | undefined;
 
   try {
-    await channel.assertQueue(orderConfirmationQueueName, { durable: true });
+    await assertEmailTopology(channel);
+    channel.on("return", (returnedMessage) => {
+      returned = new Error(
+        `RabbitMQ could not route email command ${returnedMessage.properties.messageId ?? validatedMessage.commandId}`,
+      );
+    });
 
-    channel.sendToQueue(
-      orderConfirmationQueueName,
+    channel.publish(
+      emailSendExchangeName,
+      emailSendRoutingKey,
       Buffer.from(JSON.stringify(validatedMessage)),
       {
+        mandatory: true,
         persistent: true,
         contentType: "application/json",
-        messageId: validatedMessage.eventId,
-        correlationId: validatedMessage.correlationId,
-        type: "order.confirmed.v1",
+        messageId: validatedMessage.commandId,
+        correlationId: traceContext?.correlationId ?? validatedMessage.commandId,
+        type: "email.send.v1",
         headers: {
           ...(traceContext ? { traceparent: traceContext.traceparent } : {}),
           ...(traceContext?.tracestate ? { tracestate: traceContext.tracestate } : {}),
@@ -38,6 +54,10 @@ export async function publishOrderConfirmation(
     );
 
     await channel.waitForConfirms();
+    // RabbitMQ sends basic.return before the confirm; let the channel process
+    // that frame before treating the confirmed publish as successful.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    if (returned) throw returned;
   } finally {
     await channel.close();
     await connection.close();

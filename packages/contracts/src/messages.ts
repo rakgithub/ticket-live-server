@@ -56,8 +56,17 @@ export const EmailSendV1Schema = z.object({
   notificationKey: z.string().min(1),
   templateId: z.string().min(1),
   recipient: z.email(),
-  data: z.record(z.string(), z.unknown()),
-});
+  data: z.object({
+    orderId: z.uuid(),
+    customerName: z.string().min(1),
+    eventName: z.string().min(1),
+    eventLocation: z.string().min(1),
+    eventStartsAt: z.iso.datetime(),
+    quantity: z.number().int().positive(),
+    totalAmountCents: z.number().int().nonnegative(),
+    currencyCode: z.string().regex(/^[A-Z]{3}$/),
+  }).strict(),
+}).strict();
 
 export type OrderConfirmedV1 = z.infer<typeof OrderConfirmedV1Schema>;
 export type EmailSendV1 = z.infer<typeof EmailSendV1Schema>;

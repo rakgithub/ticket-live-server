@@ -13,6 +13,8 @@
     "start": "node src/server.ts",
     "start:worker": "node src/workers/outboxWorkerMain.ts",
     "start:email-worker": "tsx src/workers/emailWorkerMain.ts",
+    "start:event-service": "tsx apps/event-service/src/main.ts",
+    "event:rebuild-index": "tsx apps/event-service/src/rebuildIndexMain.ts",
     "rabbitmq:test:consume": "tsx src/scripts/rabbitmqTestConsumer.ts",
     "rabbitmq:test:publish": "tsx src/scripts/rabbitmqTestPublisher.ts",
     "db:clear": "tsx src/scripts/clearDatabase.ts"

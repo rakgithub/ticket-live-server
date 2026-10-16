@@ -3,7 +3,7 @@ import {
   check,
   index,
   integer,
-  pgTable,
+  pgSchema,
   text,
   timestamp,
   uuid,
@@ -20,7 +20,9 @@ export const inventoryHoldStates = [
 
 export type InventoryHoldState = (typeof inventoryHoldStates)[number];
 
-export const inventoryHoldsTable = pgTable(
+const eventSchema = pgSchema("event_service");
+
+export const inventoryHoldsTable = eventSchema.table(
   "inventory_holds",
   {
     holdId: uuid("hold_id").primaryKey(),

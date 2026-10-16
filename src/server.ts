@@ -4,17 +4,13 @@ import helmet from "helmet";
 import { env, corsOrigins } from "./config/env.ts";
 import { pool } from "./db/client.ts";
 import { requireAuth } from "./auth/requireAuth.ts";
-import { requireInternalServiceAuth } from "./auth/requireInternalServiceAuth.ts";
 import authRoutes from "./routes/authRoutes.ts";
 import eventsRoutes from "./routes/eventsRoutes.ts";
-import internalInventoryRoutes from "./routes/internalInventoryRoutes.ts";
-import { elasticsearch } from "./search/client.ts";
 import ordersRoutes from "./routes/ordersRoutes.ts";
 import chatRoutes from "./routes/chatRoutes.ts";
 import healthRoutes from "./routes/healthRoutes.ts";
 import { httpObservabilityMiddleware } from "./observability/httpMiddleware.ts";
 import { createLogger } from "./observability/logger.ts";
-import { expireExpiredInventoryHolds } from "./services/events/inventoryHoldsService.ts";
 
 const logger = createLogger("ticket-live-public-api");
 
@@ -38,9 +34,6 @@ app.use(express.json({ limit: "100kb" }));
 app.use(healthRoutes);
 
 app.use("/", authRoutes);
-
-// Service-only endpoints live outside the browser-facing bearer-token routes.
-app.use("/internal", requireInternalServiceAuth, internalInventoryRoutes);
 
 // Keep future application routers below this line so they require a verified access token.
 app.use(requireAuth);
@@ -79,30 +72,12 @@ const server = app.listen(env.PORT, () => {
   logger.info("HTTP server listening", { port: env.PORT });
 });
 
-async function runInventoryHoldExpiry(): Promise<void> {
-  try {
-    await expireExpiredInventoryHolds();
-  } catch (error) {
-    logger.error("Inventory hold expiry pass failed", {
-      errorType: error instanceof Error ? error.name : "UnknownError",
-    });
-  }
-}
-
-void runInventoryHoldExpiry();
-const inventoryHoldExpiryTimer = setInterval(
-  () => void runInventoryHoldExpiry(),
-  env.INVENTORY_HOLD_EXPIRY_POLL_INTERVAL_MS,
-);
-inventoryHoldExpiryTimer.unref();
-
 let isShuttingDown = false;
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
     if (isShuttingDown) return;
     isShuttingDown = true;
-    clearInterval(inventoryHoldExpiryTimer);
     logger.info("HTTP server shutting down", { signal });
 
     server.close((error) => {
@@ -120,12 +95,6 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
         process.exitCode = 1;
       });
 
-      void elasticsearch.close().catch((elasticsearchError) => {
-        logger.error("Elasticsearch client shutdown failed", {
-          errorType: elasticsearchError instanceof Error ? elasticsearchError.name : "UnknownError",
-        });
-        process.exitCode = 1;
-      });
     });
   });
 }

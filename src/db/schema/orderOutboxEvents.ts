@@ -24,11 +24,14 @@ export const orderOutboxEventsTable = orderSchema.table(
       .defaultNow(),
     processedAt: timestamp("processed_at", { withTimezone: true }),
     attempts: integer("attempts").notNull().default(0),
+    availableAt: timestamp("available_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     lastError: text("last_error"),
   },
   (table) => [
     check("outbox_events_attempts_nonnegative", sql`${table.attempts} >= 0`),
-    index("outbox_events_pending_idx").on(table.processedAt, table.createdAt),
+    index("outbox_events_pending_idx").on(table.processedAt, table.availableAt, table.createdAt),
   ],
 );
 

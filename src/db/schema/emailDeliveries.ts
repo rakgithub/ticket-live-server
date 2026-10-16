@@ -14,6 +14,7 @@ export const emailDeliveriesTable = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     eventId: uuid("event_id").notNull(),
+    notificationKey: text("notification_key").notNull(),
     orderId: uuid("order_id").notNull(),
     recipientEmail: text("recipient_email").notNull(),
     status: text("status").notNull().default("simulated"),
@@ -30,6 +31,7 @@ export const emailDeliveriesTable = pgTable(
       sql`${table.status} IN ('simulated', 'sent', 'failed')`,
     ),
     uniqueIndex("email_deliveries_event_id_idx").on(table.eventId),
+    uniqueIndex("email_deliveries_notification_key_idx").on(table.notificationKey),
     index("email_deliveries_order_id_idx").on(table.orderId),
   ],
 );

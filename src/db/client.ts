@@ -3,10 +3,12 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { env } from "../config/env.ts";
 import { createLogger } from "../observability/logger.ts";
 
-const logger = createLogger("ticket-live-public-api");
+const logger = createLogger(env.TICKETLIVE_SERVICE === "event" ? "ticket-live-event-service" : "ticket-live-public-api");
 
 export const pool = new Pool({
-  connectionString: env.DATABASE_URL,
+  connectionString: env.TICKETLIVE_SERVICE === "event"
+    ? env.EVENT_SERVICE_DATABASE_URL
+    : env.DATABASE_URL,
   max: 5,
   connectionTimeoutMillis: 5_000,
   idleTimeoutMillis: 30_000,

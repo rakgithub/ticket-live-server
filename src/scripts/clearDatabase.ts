@@ -3,10 +3,10 @@ import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { Pool } from "pg";
 
-const databaseUrl = process.env.DATABASE_URL;
+const databaseUrl = process.env.MIGRATION_DATABASE_URL ?? process.env.DATABASE_URL;
 
 if (!databaseUrl) {
-  throw new Error("DATABASE_URL is missing from .env");
+  throw new Error("MIGRATION_DATABASE_URL or DATABASE_URL is missing from .env");
 }
 
 if (!stdin.isTTY || !stdout.isTTY) {
@@ -43,9 +43,10 @@ if (confirmation !== "DELETE ALL DATA") {
       "email_deliveries",
       "order_service.outbox_events",
       "order_service.orders",
-      "events",
+      "event_service.inventory_holds",
+      "event_service.outbox_events",
+      "event_service.events",
       "revoked_access_tokens",
-      "public.outbox_events",
     ];
 
     for (const table of tables) {

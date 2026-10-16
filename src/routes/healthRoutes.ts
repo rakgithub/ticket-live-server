@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { pool } from "../db/client.ts";
-import { elasticsearch } from "../search/client.ts";
+import { getEventServiceClient } from "../services/events/eventServiceClient.ts";
 import { renderHttpMetrics } from "../observability/metrics.ts";
 import { exportOtlpMetrics } from "../observability/otlpMetricsExporter.ts";
 
@@ -11,15 +11,15 @@ healthRoutes.get("/health/live", (_req, res) => {
 });
 
 healthRoutes.get("/health/ready", async (_req, res) => {
-  const [postgres, elasticsearchStatus] = await Promise.allSettled([
+  const [postgres, eventService] = await Promise.allSettled([
     pool.query("SELECT 1"),
-    elasticsearch.ping({}, { requestTimeout: 1_000 }),
+    getEventServiceClient().readiness(),
   ]);
   const checks = {
     postgres: postgres.status === "fulfilled",
-    elasticsearch: elasticsearchStatus.status === "fulfilled",
+    eventService: eventService.status === "fulfilled" && eventService.value.status === "ready",
   };
-  const ready = checks.postgres && checks.elasticsearch;
+  const ready = checks.postgres && checks.eventService;
 
   res.status(ready ? 200 : 503).json({
     status: ready ? "ready" : "not_ready",
@@ -35,10 +35,6 @@ healthRoutes.get("/metrics", async (_req, res) => {
         SUM(pending)::text AS pending,
         GREATEST(0, EXTRACT(EPOCH FROM (NOW() - MIN(oldest_created_at))))::text AS oldest_age_seconds
       FROM (
-        SELECT COUNT(*) AS pending, MIN(created_at) AS oldest_created_at
-        FROM public.outbox_events
-        WHERE processed_at IS NULL
-        UNION ALL
         SELECT COUNT(*) AS pending, MIN(created_at) AS oldest_created_at
         FROM order_service.outbox_events
         WHERE processed_at IS NULL

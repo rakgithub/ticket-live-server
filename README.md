@@ -1,9 +1,9 @@
 # Ticket Live Server
 
 Ticket Live is a Node.js API for an event ticket booking app. Users can register
-and sign in, create and search events, and check out tickets. The API stores
-events and orders in PostgreSQL, uses Elasticsearch for event search, and uses
-a mock payment provider for checkout. After an order is confirmed, a background
+and sign in, create and search events, and check out tickets. Event owns the
+catalog and inventory in PostgreSQL, Order owns orders, and Event uses
+Elasticsearch for event search. Checkout uses a mock payment provider. After an order is confirmed, a background
 worker publishes a message through RabbitMQ; the email worker currently records
 a simulated confirmation delivery.
 
@@ -33,8 +33,8 @@ Requirements: Docker with the Compose plugin, and pnpm.
    This creates `identity_service`, `order_service`, `event_service`,
    `email_service`, and `notification_service` schemas with separate local
    roles, and a temporary `ticketlive_public_api` runtime login for the current
-   integrated app. The Order storage migration fills `order_service`; the other
-   service schemas remain empty for now. Migrations use `MIGRATION_DATABASE_URL`;
+   integrated app. The Order and Event storage migrations fill their schemas.
+   Migrations use `MIGRATION_DATABASE_URL`;
    set the `TICKETLIVE_*_DB_PASSWORD` values in `.env` before using these
    logins. The public API compatibility login is intentionally able to access
    all legacy tables until the first ownership cutover.
@@ -51,7 +51,17 @@ Requirements: Docker with the Compose plugin, and pnpm.
    pnpm exec drizzle-kit migrate
    ```
 
-4. Start the API server in one terminal:
+4. Start Event service in a terminal, using the Event-owned database login:
+
+   ```sh
+   EVENT_SERVICE_DATABASE_URL=postgres://ticketlive_event:local-event-password@localhost:5433/ticket_live pnpm start:event-service
+   ```
+
+   It listens at `http://localhost:4003`, owns event catalog and inventory
+   tables, expires holds, and indexes its transactional outbox. Keep this
+   database URL only in the Event service process environment.
+
+5. Start the public API server in another terminal:
 
    ```sh
    pnpm start
@@ -60,24 +70,25 @@ Requirements: Docker with the Compose plugin, and pnpm.
    The equivalent workspace entry point is
    `pnpm --filter @ticket-live/public-api start`.
 
-5. Start the outbox worker in a second terminal:
+6. Start the Order outbox worker:
 
    ```sh
    pnpm start:worker
    ```
 
    The API listens at `http://localhost:4002`. The worker has no HTTP port; it
-   polls PostgreSQL and writes pending event documents to Elasticsearch.
+   polls Order's PostgreSQL outbox and publishes email and inventory commands.
 
-6. Start the email worker in a third terminal:
+7. Start the email worker:
 
    ```sh
    pnpm start:email-worker
    ```
 
-   It listens on RabbitMQ's `booking-confirmation-email` queue and currently
-   records simulated email deliveries in PostgreSQL. It does not send real
-   email or generate PDFs yet.
+   It listens on the `email.send.v1` queue and also drains the legacy
+   `booking-confirmation-email` queue during the cutover. It records simulated
+   email deliveries in PostgreSQL. It does not send real email or generate PDFs
+   yet.
 
 The API exposes `GET /health/live`, `GET /health/ready`, and `GET /metrics`.
 Configure `OTEL_EXPORTER_OTLP_ENDPOINT` to send OTLP traces and metrics to a
@@ -101,8 +112,9 @@ bytes (the `.env.example` value is a placeholder) and give it only to trusted
 service callers; production startup requires it. The internal API is not for
 browser clients. Active holds expire every two seconds by default;
 `INVENTORY_HOLD_EXPIRY_POLL_INTERVAL_MS` adjusts that polling interval.
-Order calls the temporary Event inventory API at `INVENTORY_SERVICE_URL`,
-which defaults to `http://localhost:4002` for the integrated local app.
+Order calls the Event inventory API at `INVENTORY_SERVICE_URL`, which defaults
+to `http://localhost:4003`. Public catalog and chat requests use
+`EVENT_SERVICE_URL`, also defaulting to port 4003.
 
 To stop PostgreSQL while keeping its data, run `docker compose down`. To also
 delete the local database volume and all its data, run
@@ -124,7 +136,7 @@ must enable authentication and TLS.
 ## Event outbox
 
 Creating an event now inserts both the event row and an `event.created` row in
-`outbox_events` within the same PostgreSQL transaction. The outbox row contains
+`event_service.outbox_events` within the same PostgreSQL transaction. The outbox row contains
 the event ID and a JSON snapshot for indexing. If either insert fails,
 PostgreSQL rolls back both inserts.
 
@@ -137,19 +149,22 @@ Inspect pending outbox rows with:
 
 ```sh
 docker compose exec postgres psql -U user -d ticket_live \
-  -c "SELECT id, event_type, aggregate_id, payload, created_at FROM public.outbox_events WHERE processed_at IS NULL UNION ALL SELECT id, event_type, aggregate_id, payload, created_at FROM order_service.outbox_events WHERE processed_at IS NULL ORDER BY created_at;"
+  -c "SELECT id, event_type, aggregate_id, payload, created_at FROM event_service.outbox_events WHERE processed_at IS NULL UNION ALL SELECT id, event_type, aggregate_id, payload, created_at FROM order_service.outbox_events WHERE processed_at IS NULL ORDER BY created_at;"
 ```
 
-Rows remain pending until the separately started background worker processes
-them. It polls every two seconds and routes each event by type:
+Rows remain pending until their owning service's relay processes them. The Event
+service indexes catalog changes, while the Order worker routes:
 
-- `event.created` is indexed directly in Elasticsearch.
-- `order.confirmed` is published to RabbitMQ for the email worker.
+- `order.confirmed` is adapted to an `email.send.v1` RabbitMQ command for the
+  email worker. The command has a stable notification key, persistent delivery,
+  publisher confirms, and mandatory routing checks.
+- `inventory.hold.release` is retried against Event by stable hold ID after an
+  Order payment failure or reservation expiry.
 
-The worker reads event-indexing messages from `public.outbox_events` and order
-messages from `order_service.outbox_events`. It marks a row processed after its
-destination accepts the event. Failed rows remain pending and include the
-failed attempt count and error message.
+The Event service processes `event_service.outbox_events`; the Order worker
+processes `order_service.outbox_events`. Each marks a row processed after its
+destination accepts the event. Failed rows retain attempt counts and retry with
+capped exponential backoff and jitter.
 
 Checkout now requires an `Idempotency-Key` header. If a client retries the
 same checkout body with the same key after the first request finishes, the API
@@ -167,17 +182,19 @@ outbox worker retries those commands and reconciles stale checkout attempts.
 If a checkout returns `503` while Event is unavailable or the outcome is
 uncertain, retry with the same key so reconciliation can continue safely.
 
-The worker creates an Elasticsearch `events` index on first use. Elasticsearch
-uses the PostgreSQL event ID as its document ID, so retrying the same outbox row
-updates the same document safely.
+The Event service creates an Elasticsearch `events` index on first use and
+applies catalog changes with monotonically increasing versions. Rebuild the
+index from Event's database with
+`EVENT_SERVICE_DATABASE_URL=postgres://ticketlive_event:local-event-password@localhost:5433/ticket_live pnpm event:rebuild-index`.
 
-The email worker validates each `order.confirmed` message, then inserts a row in
-`email_deliveries` with status `simulated`. It uses the outbox event ID to avoid
-recording the same delivery twice. To inspect those records:
+The email worker validates each `email.send.v1` command, then inserts a row in
+`email_deliveries` with status `simulated`. It uses the logical notification key
+to avoid recording the same delivery twice and continues to consume legacy
+confirmation messages until that queue is drained. To inspect those records:
 
 ```sh
 docker compose exec postgres psql -U user -d ticket_live \
-  -c "SELECT order_id, recipient_email, status, created_at FROM email_deliveries ORDER BY created_at DESC;"
+  -c "SELECT notification_key, order_id, recipient_email, status, created_at FROM email_deliveries ORDER BY created_at DESC;"
 ```
 
 The RabbitMQ test publisher and consumer under `src/scripts/` are development
@@ -186,7 +203,8 @@ not leave it running while processing real confirmation messages.
 
 ## Event search
 
-`GET /events/search` queries Elasticsearch instead of PostgreSQL. It requires
+`GET /events/search` asks Event to query Elasticsearch and refreshes its results
+from Event's catalog. It requires
 the same access token as other event routes and supports a required `q` query
 parameter plus an optional `limit` from 1 to 50:
 
@@ -202,8 +220,8 @@ results by relevance and then by event start time.
 
 The authenticated `POST /chat/events/stream` endpoint accepts a natural-language
 event search and streams Server-Sent Events (SSE) over the same HTTP response.
-It uses LangGraph to extract supported search criteria, searches Elasticsearch,
-rechecks candidate events against PostgreSQL, then streams a short introduction
+It uses LangGraph to extract supported search criteria, asks Event for ranked
+search candidates and fresh event cards, then streams a short introduction
 from the configured Gemini model. Event cards arrive in a `results` frame before
 the model introduction, so the frontend can render them immediately.
 
@@ -236,6 +254,6 @@ a JSON body and bearer token.
 
 Chat search only supports text and the existing free-text event location field.
 It does not answer FAQ or live availability questions, and the index remains
-eventually consistent. The chat hydrates Elasticsearch IDs from PostgreSQL to
-exclude events that are no longer active, but it cannot discover new events
-until the outbox worker indexes them.
+eventually consistent. Event hydrates search IDs from its database to exclude
+events that are no longer active; newly created events appear after the Event
+outbox indexes them.

@@ -7,7 +7,7 @@ import {
 } from "../../chat/eventDiscoveryGraph.ts";
 import { env } from "../../config/env.ts";
 import { createLogger } from "../../observability/logger.ts";
-import { EventSearchUnavailableError } from "../../services/events/eventsSearchService.ts";
+import { EventServiceError } from "../../services/events/eventServiceClient.ts";
 
 const logger = createLogger("ticket-live-public-api");
 
@@ -238,7 +238,7 @@ export async function streamEventSearch(req: Request, res: Response): Promise<vo
 
     const code: PublicStreamError = timedOut
       ? "request_timeout"
-      : causedBy(error, EventSearchUnavailableError.name)
+      : causedBy(error, EventServiceError.name) || getErrorStatus(error) === 503
         ? "search_unavailable"
         : getErrorStatus(error) === 429
           ? "provider_quota_exhausted"

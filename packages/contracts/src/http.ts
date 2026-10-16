@@ -67,6 +67,30 @@ export const CheckoutResponseSchema = z.object({
 
 export const HttpErrorSchema = z.object({ error: z.string().min(1) });
 
+export const EventSchema = z.object({
+  id: z.uuid(),
+  name: z.string().min(1),
+  description: z.string().min(1),
+  location: z.string().min(1),
+  minPeople: z.number().int().positive(),
+  maxPeople: z.number().int().positive(),
+  reservedQuantity: z.number().int().nonnegative(),
+  ticketPriceCents: z.number().int().nonnegative(),
+  currencyCode: z.string().regex(/^[A-Z]{3}$/),
+  servesAlcohol: z.boolean(),
+  isCancelled: z.boolean(),
+  userId: z.uuid(),
+  startsAt: z.iso.datetime(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+
+export const EventListResponseSchema = z.object({ events: z.array(EventSchema) });
+export const EventCreateResponseSchema = z.object({ event: EventSchema });
+export const EventSearchResponseSchema = z.object({
+  events: z.array(EventSchema.extend({ score: z.number().nullable() })),
+});
+
 export type CheckoutRequest = z.infer<typeof CheckoutRequestSchema>;
 export type CheckoutIdempotencyKey = z.infer<typeof CheckoutIdempotencyKeySchema>;
 export type CheckoutResponse = z.infer<typeof CheckoutResponseSchema>;
@@ -75,3 +99,4 @@ export type InventoryHoldIdempotencyKey = z.infer<typeof InventoryHoldIdempotenc
 export type InventoryHoldState = z.infer<typeof InventoryHoldStateSchema>;
 export type InventoryHold = z.infer<typeof InventoryHoldSchema>;
 export type InventoryHoldResponse = z.infer<typeof InventoryHoldResponseSchema>;
+export type Event = z.infer<typeof EventSchema>;

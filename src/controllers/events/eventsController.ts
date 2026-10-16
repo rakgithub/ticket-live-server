@@ -1,10 +1,6 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
-import {
-  createEvent,
-  getEvents,
-} from "../../services/events/eventsService.ts";
-import { searchEvents } from "../../services/events/eventsSearchService.ts";
+import { EventServiceError, getEventServiceClient } from "../../services/events/eventServiceClient.ts";
 import { createLogger } from "../../observability/logger.ts";
 
 const logger = createLogger("ticket-live-public-api");
@@ -24,9 +20,7 @@ const createEventBodySchema = z
       .regex(/^[A-Z]{3}$/, "Currency code must be a three-letter ISO code"),
     servesAlcohol: z.boolean().default(false),
     startsAt: z
-      .iso
-      .datetime({ offset: true })
-      .transform((value) => new Date(value)),
+      .iso.datetime({ offset: true }),
   })
   .refine((event) => event.maxPeople >= event.minPeople, {
     message: "maxPeople must be at least minPeople",
@@ -39,8 +33,8 @@ const searchEventsQuerySchema = z.object({
 });
 
 export async function getAllEvents(_req: Request, res: Response): Promise<void> {
-  const events = await getEvents();
-  res.status(200).json({ events });
+  try { res.status(200).json(await getEventServiceClient().listEvents()); }
+  catch (error) { if (error instanceof EventServiceError) { res.status(error.status).json({ error: error.message }); return; } throw error; }
 }
 
 export async function getSearchEvents(req: Request, res: Response): Promise<void> {
@@ -51,12 +45,8 @@ export async function getSearchEvents(req: Request, res: Response): Promise<void
     return;
   }
 
-  const events = await searchEvents({
-    query: parsedQuery.data.q,
-    limit: parsedQuery.data.limit,
-  });
-
-  res.status(200).json({ events });
+  try { res.status(200).json(await getEventServiceClient().search(parsedQuery.data.q, parsedQuery.data.limit)); }
+  catch (error) { if (error instanceof EventServiceError) { res.status(error.status).json({ error: error.message }); return; } throw error; }
 }
 
 export async function postEvent(req: Request, res: Response): Promise<void> {
@@ -72,7 +62,12 @@ export async function postEvent(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const event = await createEvent(req.auth.userId, parsedBody.data);
-  logger.info("Event created", { eventId: event.id });
-  res.status(201).json({ event });
+  try {
+    const result = await getEventServiceClient().createEvent(parsedBody.data, req.auth.userId);
+    logger.info("Event created", { eventId: result.event.id });
+    res.status(201).json(result);
+  } catch (error) {
+    if (error instanceof EventServiceError) { res.status(error.status).json({ error: error.message }); return; }
+    throw error;
+  }
 }

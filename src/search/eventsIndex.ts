@@ -39,10 +39,16 @@ export async function ensureEventsIndex(): Promise<void> {
           startsAt: { type: "date" },
           createdAt: { type: "date" },
           updatedAt: { type: "date" },
+          version: { type: "long" },
+          isDeleted: { type: "boolean" },
         },
       },
     });
   }
 
   indexReady = true;
+}
+
+export function resetEventsIndexReadiness(): void {
+  indexReady = false;
 }

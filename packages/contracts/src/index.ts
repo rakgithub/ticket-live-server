@@ -8,6 +8,10 @@ export {
   InventoryHoldSchema,
   InventoryHoldResponseSchema,
   HttpErrorSchema,
+  EventSchema,
+  EventListResponseSchema,
+  EventCreateResponseSchema,
+  EventSearchResponseSchema,
   type CheckoutRequest,
   type CheckoutIdempotencyKey,
   type CheckoutResponse,
@@ -16,6 +20,7 @@ export {
   type InventoryHoldState,
   type InventoryHold,
   type InventoryHoldResponse,
+  type Event,
 } from "./http.ts";
 export {
   EmailSendV1Schema,

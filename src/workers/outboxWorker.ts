@@ -1,35 +1,32 @@
-import { asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, lte, sql } from "drizzle-orm";
 import { env } from "../config/env.ts";
 import { db } from "../db/client.ts";
-import { outboxEventsTable } from "../db/schema/outboxEvents.ts";
 import { orderOutboxEventsTable } from "../db/schema/orderOutboxEvents.ts";
-import {
-  publishOrderConfirmation,
-  type OrderConfirmationMessage,
-} from "../messaging/publishOrderConfirmation.ts";
-import { OrderConfirmedV1Schema } from "@ticket-live/contracts";
+import { publishEmailSendCommand } from "../messaging/publishOrderConfirmation.ts";
+import { EmailSendV1Schema } from "@ticket-live/contracts";
 import { createLogger } from "../observability/logger.ts";
 import {
   createMessageTraceContext,
   runWithTraceContext,
 } from "../observability/traceContext.ts";
 import { startSpan } from "../observability/traceExporter.ts";
-import { elasticsearch } from "../search/client.ts";
-import { ensureEventsIndex, eventsIndexName } from "../search/eventsIndex.ts";
 import { expirePendingReservations } from "../services/orders/expireReservationsService.ts";
 import { reconcileCheckoutState } from "../services/orders/checkoutService.ts";
 import { releaseInventoryHoldCommand } from "../services/orders/releaseInventoryHold.ts";
+import { reconcileOrderInventory } from "../services/orders/reconcileInventory.ts";
 
 const batchSize = 25;
 const logger = createLogger("ticket-live-outbox-worker");
+let lastInventoryReconciliationAt = 0;
 
 type PendingOutboxEvent = {
-  source: "event" | "order";
+  source: "order";
   id: string;
   eventType: string;
   aggregateId: string;
   payload: Record<string, unknown>;
   createdAt: Date;
+  attempts: number;
 };
 
 async function processOutboxEvent(event: {
@@ -39,30 +36,34 @@ async function processOutboxEvent(event: {
   payload: Record<string, unknown>;
   createdAt: Date;
 }): Promise<void> {
-  const { __telemetry, ...payload } = event.payload;
-  if (event.eventType === "event.created") {
-    await ensureEventsIndex();
-    await elasticsearch.index({
-      index: eventsIndexName,
-      id: event.aggregateId,
-      document: payload,
-    });
-    return;
-  }
-
+  const payload = { ...event.payload };
+  delete payload.__telemetry;
   if (event.eventType === "order.confirmed") {
-    await publishOrderConfirmation(OrderConfirmedV1Schema.parse({
-      eventId: event.id,
-      eventType: "order.confirmed",
+    const order = payload as {
+      orderId: string;
+      customer: { name: string; email: string };
+      event: { name: string; location: string; startsAt: string };
+      quantity: number;
+      totalAmountCents: number;
+      currencyCode: string;
+    };
+    await publishEmailSendCommand(EmailSendV1Schema.parse({
+      commandId: event.id,
+      commandType: "email.send",
       schemaVersion: 1,
-      aggregateId: event.aggregateId,
-      occurredAt: event.createdAt.toISOString(),
-      correlationId:
-        typeof __telemetry === "object" && __telemetry !== null && "correlationId" in __telemetry &&
-        typeof __telemetry.correlationId === "string"
-          ? __telemetry.correlationId
-          : event.id,
-      data: payload as OrderConfirmationMessage["data"],
+      notificationKey: `order-confirmation:${event.aggregateId}`,
+      templateId: "order-confirmation-v1",
+      recipient: order.customer.email,
+      data: {
+        orderId: order.orderId,
+        customerName: order.customer.name,
+        eventName: order.event.name,
+        eventLocation: order.event.location,
+        eventStartsAt: order.event.startsAt,
+        quantity: order.quantity,
+        totalAmountCents: order.totalAmountCents,
+        currencyCode: order.currencyCode,
+      },
     }));
     return;
   }
@@ -83,40 +84,34 @@ export async function processOutboxBatch(): Promise<number> {
   try {
     await expirePendingReservations();
     await reconcileCheckoutState();
+    if (Date.now() - lastInventoryReconciliationAt >= env.INVENTORY_RECONCILIATION_INTERVAL_MS) {
+      lastInventoryReconciliationAt = Date.now();
+      await reconcileOrderInventory();
+    }
   } catch (error) {
     logger.error("Order maintenance pass failed", {
       errorType: error instanceof Error ? error.name : "UnknownError",
     });
   }
 
-  const [eventOutboxRows, orderOutboxRows] = await Promise.all([
-    db
-      .select({
-        id: outboxEventsTable.id,
-        eventType: outboxEventsTable.eventType,
-        aggregateId: outboxEventsTable.aggregateId,
-        payload: outboxEventsTable.payload,
-        createdAt: outboxEventsTable.createdAt,
-      })
-      .from(outboxEventsTable)
-      .where(isNull(outboxEventsTable.processedAt))
-      .orderBy(asc(outboxEventsTable.createdAt))
-      .limit(batchSize),
-    db
+  const now = new Date();
+  const orderOutboxRows = await db
       .select({
         id: orderOutboxEventsTable.id,
         eventType: orderOutboxEventsTable.eventType,
         aggregateId: orderOutboxEventsTable.aggregateId,
         payload: orderOutboxEventsTable.payload,
         createdAt: orderOutboxEventsTable.createdAt,
+        attempts: orderOutboxEventsTable.attempts,
       })
       .from(orderOutboxEventsTable)
-      .where(isNull(orderOutboxEventsTable.processedAt))
+      .where(and(
+        isNull(orderOutboxEventsTable.processedAt),
+        lte(orderOutboxEventsTable.availableAt, now),
+      ))
       .orderBy(asc(orderOutboxEventsTable.createdAt))
-      .limit(batchSize),
-  ]);
+      .limit(batchSize);
   const pendingEvents: PendingOutboxEvent[] = [
-    ...eventOutboxRows.map((event) => ({ ...event, source: "event" as const })),
     ...orderOutboxRows.map((event) => ({ ...event, source: "order" as const })),
   ]
     .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
@@ -159,37 +154,25 @@ export async function processOutboxBatch(): Promise<number> {
         }
       });
 
-      if (event.source === "order") {
-        await db
-          .update(orderOutboxEventsTable)
-          .set({ processedAt: new Date(), lastError: null })
-          .where(eq(orderOutboxEventsTable.id, event.id));
-      } else {
-        await db
-          .update(outboxEventsTable)
-          .set({ processedAt: new Date(), lastError: null })
-          .where(eq(outboxEventsTable.id, event.id));
-      }
+      await db.update(orderOutboxEventsTable).set({ processedAt: new Date(), lastError: null }).where(eq(orderOutboxEventsTable.id, event.id));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
 
-      if (event.source === "order") {
-        await db
+      const retryDelayMs = Math.min(
+        300_000,
+        1_000 * 2 ** Math.min(event.attempts, 8),
+      );
+      const jitterMs = Math.floor(Math.random() * Math.max(1, retryDelayMs / 4));
+      const availableAt = new Date(Date.now() + retryDelayMs + jitterMs);
+
+      await db
           .update(orderOutboxEventsTable)
           .set({
             attempts: sql`${orderOutboxEventsTable.attempts} + 1`,
+            availableAt,
             lastError: message.slice(0, 2_000),
           })
           .where(eq(orderOutboxEventsTable.id, event.id));
-      } else {
-        await db
-          .update(outboxEventsTable)
-          .set({
-            attempts: sql`${outboxEventsTable.attempts} + 1`,
-            lastError: message.slice(0, 2_000),
-          })
-          .where(eq(outboxEventsTable.id, event.id));
-      }
 
       logger.error("Outbox event processing failed", {
         messageId: event.id,
