@@ -1,4 +1,8 @@
-import { EmailSendV1Schema, type EmailSendV1 } from "@ticket-live/contracts";
+import {
+  EmailSendV1Schema,
+  OrderConfirmedDataSchema,
+  type EmailSendV1,
+} from "@ticket-live/contracts";
 
 export type OrderConfirmedOutboxEvent = {
   id: string;
@@ -12,14 +16,7 @@ export function buildOrderConfirmationEmailCommand(
 ): EmailSendV1 {
   const payload = { ...event.payload };
   delete payload.__telemetry;
-  const order = payload as {
-    orderId: string;
-    customer: { name: string; email: string };
-    event: { name: string; location: string; startsAt: string };
-    quantity: number;
-    totalAmountCents: number;
-    currencyCode: string;
-  };
+  const order = OrderConfirmedDataSchema.parse(payload);
   if (order.orderId !== event.aggregateId) {
     throw new Error("Order confirmation payload does not match its outbox aggregate ID");
   }

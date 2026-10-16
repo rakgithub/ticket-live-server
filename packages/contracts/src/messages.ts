@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const OrderConfirmationDataSchema = z.object({
+export const OrderConfirmedDataSchema = z.object({
   orderId: z.uuid(),
   customer: z.object({
     name: z.string().min(1),
@@ -16,6 +16,15 @@ const OrderConfirmationDataSchema = z.object({
   ticketPriceCents: z.number().int().nonnegative(),
   totalAmountCents: z.number().int().nonnegative(),
   currencyCode: z.string().regex(/^[A-Z]{3}$/),
+}).superRefine((data, context) => {
+  const expectedTotal = data.quantity * data.ticketPriceCents;
+  if (!Number.isSafeInteger(expectedTotal) || data.totalAmountCents !== expectedTotal) {
+    context.addIssue({
+      code: "custom",
+      path: ["totalAmountCents"],
+      message: "totalAmountCents must equal quantity multiplied by ticketPriceCents",
+    });
+  }
 });
 
 export const OrderConfirmedV1Schema = z.object({
@@ -25,7 +34,7 @@ export const OrderConfirmedV1Schema = z.object({
   aggregateId: z.uuid(),
   occurredAt: z.iso.datetime(),
   correlationId: z.uuid(),
-  data: OrderConfirmationDataSchema,
+  data: OrderConfirmedDataSchema,
 });
 
 /** Accepts messages already persisted in RabbitMQ before the v1 cutover. */
@@ -33,7 +42,7 @@ export const LegacyOrderConfirmedMessageSchema = z.object({
   eventId: z.uuid(),
   eventType: z.literal("order.confirmed"),
   occurredAt: z.iso.datetime(),
-  data: OrderConfirmationDataSchema,
+  data: OrderConfirmedDataSchema,
 }).strict();
 
 export function parseOrderConfirmedMessage(value: unknown): OrderConfirmedV1 {
@@ -49,11 +58,15 @@ export function parseOrderConfirmedMessage(value: unknown): OrderConfirmedV1 {
   });
 }
 
+/**
+ * Unknown fields are stripped so older consumers can safely read additive
+ * optional fields introduced within v1.
+ */
 export const EmailSendV1Schema = z.object({
   commandId: z.uuid(),
   commandType: z.literal("email.send"),
   schemaVersion: z.literal(1),
-  notificationKey: z.string().min(1),
+  notificationKey: z.string().min(1).max(255),
   templateId: z.string().min(1),
   recipient: z.email(),
   data: z.object({
@@ -65,8 +78,9 @@ export const EmailSendV1Schema = z.object({
     quantity: z.number().int().positive(),
     totalAmountCents: z.number().int().nonnegative(),
     currencyCode: z.string().regex(/^[A-Z]{3}$/),
-  }).strict(),
-}).strict();
+  }),
+});
 
+export type OrderConfirmedData = z.infer<typeof OrderConfirmedDataSchema>;
 export type OrderConfirmedV1 = z.infer<typeof OrderConfirmedV1Schema>;
 export type EmailSendV1 = z.infer<typeof EmailSendV1Schema>;

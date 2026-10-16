@@ -2,7 +2,11 @@ asyncapi: 2.6.0
 info:
   title: Ticket Live message contracts
   version: 1.0.0
-  description: Versioned message payloads and ownership for the staged migration.
+  description: >-
+    Order owns order.confirmed.v1 and the email.send.v1 command; Email owns
+    delivery. Additive optional fields are backward compatible within v1:
+    consumers ignore fields they do not know. Removing or changing a field's
+    meaning requires a new schema version and a dual-read migration period.
 defaultContentType: application/json
 channels:
   booking-confirmation-email:
@@ -22,7 +26,7 @@ components:
     OrderConfirmedV1:
       name: order.confirmed.v1
       title: Order confirmed
-      summary: Order-owned business fact; temporarily adapted to the legacy confirmation queue and Email command.
+      summary: Order-owned business fact; temporarily adapted to the legacy confirmation queue and Email command. Payloads contain only the customer and event snapshots needed for confirmation delivery.
       contentType: application/json
       headers:
         type: object
@@ -60,7 +64,7 @@ components:
     EmailSendV1:
       name: email.send.v1
       title: Send email
-      summary: Order-to-Email command. Email owns delivery and deduplication.
+      summary: Order-to-Email command. Email owns delivery and deduplication by notificationKey, which is unique in Email's inbox table.
       contentType: application/json
       headers:
         type: object
@@ -83,10 +87,17 @@ components:
             recipient: customer@example.com
             data:
               orderId: e637ca0a-0b5f-42ce-a070-bfa9c05aaf1a
+              customerName: Example Customer
               eventName: Example Concert
+              eventLocation: Berlin
+              eventStartsAt: '2026-11-13T19:00:00Z'
+              quantity: 2
+              totalAmountCents: 8000
+              currencyCode: EUR
   schemas:
     OrderConfirmedV1:
       type: object
+      additionalProperties: true
       required: [eventId, eventType, schemaVersion, aggregateId, occurredAt, correlationId, data]
       properties:
         eventId: { type: string, format: uuid }
@@ -97,17 +108,20 @@ components:
         correlationId: { type: string, format: uuid }
         data:
           type: object
+          additionalProperties: true
           required: [orderId, customer, event, quantity, ticketPriceCents, totalAmountCents, currencyCode]
           properties:
             orderId: { type: string, format: uuid }
             customer:
               type: object
+              additionalProperties: true
               required: [name, email]
               properties:
                 name: { type: string, minLength: 1 }
                 email: { type: string, format: email }
             event:
               type: object
+              additionalProperties: true
               required: [id, name, location, startsAt]
               properties:
                 id: { type: string, format: uuid }
@@ -115,22 +129,23 @@ components:
                 location: { type: string }
                 startsAt: { type: string, format: date-time }
             quantity: { type: integer, minimum: 1 }
-            ticketPriceCents: { type: integer, minimum: 0 }
-            totalAmountCents: { type: integer, minimum: 0 }
+            ticketPriceCents: { type: integer, minimum: 0, description: Unit price captured by Event when the hold was created. }
+            totalAmountCents: { type: integer, minimum: 0, description: Must equal quantity multiplied by ticketPriceCents. }
             currencyCode: { type: string, pattern: '^[A-Z]{3}$' }
     EmailSendV1:
       type: object
+      additionalProperties: true
       required: [commandId, commandType, schemaVersion, notificationKey, templateId, recipient, data]
       properties:
         commandId: { type: string, format: uuid }
         commandType: { type: string, const: email.send }
         schemaVersion: { type: integer, const: 1 }
-        notificationKey: { type: string, minLength: 1 }
+        notificationKey: { type: string, minLength: 1, maxLength: 255, description: 'Stable Email inbox deduplication key; order confirmations use order-confirmation:{orderId}.' }
         templateId: { type: string, minLength: 1 }
         recipient: { type: string, format: email }
         data:
           type: object
-          additionalProperties: false
+          additionalProperties: true
           required: [orderId, customerName, eventName, eventLocation, eventStartsAt, quantity, totalAmountCents, currencyCode]
           properties:
             orderId: { type: string, format: uuid }
@@ -139,5 +154,5 @@ components:
             eventLocation: { type: string, minLength: 1 }
             eventStartsAt: { type: string, format: date-time }
             quantity: { type: integer, minimum: 1 }
-            totalAmountCents: { type: integer, minimum: 0 }
+            totalAmountCents: { type: integer, minimum: 0, description: Integer amount in currencyCode minor units. }
             currencyCode: { type: string, pattern: '^[A-Z]{3}$' }

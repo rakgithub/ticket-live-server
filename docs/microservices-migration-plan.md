@@ -134,42 +134,16 @@ The operator procedure and replay audit query are in
 certify the live legacy queue drain; complete that cutover record before
 disabling `EMAIL_LEGACY_QUEUE_ENABLED` in a deployed Email environment.
 
-## 9. Contracts and data rules to implement
+## 9. Contracts and data rules
 
-Minimum wire contract examples (illustrative; final schemas belong in `packages/contracts`):
+The executable Zod contracts are in [`packages/contracts/src/messages.ts`](../packages/contracts/src/messages.ts) and [`packages/contracts/src/http.ts`](../packages/contracts/src/http.ts). Their wire documentation and full examples are in [`asyncapi.yaml`](contracts/asyncapi.yaml), [`openapi.yaml`](contracts/openapi.yaml), and [`contracts/examples/`](contracts/examples/).
 
-```json
-{
-  "eventId": "uuid",
-  "eventType": "order.confirmed",
-  "schemaVersion": 1,
-  "aggregateId": "order-uuid",
-  "occurredAt": "2026-10-13T10:00:00Z",
-  "correlationId": "uuid",
-  "data": {
-    "orderId": "uuid",
-    "customerId": "uuid",
-    "eventId": "uuid",
-    "quantity": 2,
-    "totalAmountCents": 8000,
-    "currencyCode": "EUR"
-  }
-}
-```
-
-```json
-{
-  "commandId": "uuid",
-  "commandType": "email.send",
-  "schemaVersion": 1,
-  "notificationKey": "order-confirmation:order-uuid",
-  "templateId": "order-confirmation-v1",
-  "recipient": "customer@example.com",
-  "data": { "orderId": "uuid", "eventName": "Example Event" }
-}
-```
-
-Keep money as integer minor units and ISO currency codes; hold/order snapshots must use the same price. Consider price/version validation when a hold is created, so a catalog price change during checkout has deterministic semantics. Avoid putting card data, passwords, or full customer records into events. Record schema compatibility rules: additive optional fields within v1; breaking changes use a new version and dual-read migration. Give each message a stable ID and each consumer a unique inbox/deduplication key. Reconciliation is still required because outbox delivery is at least once and a broker cannot make database plus provider effects atomic. The [transactional outbox guidance](https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/transactional-outbox.html) explicitly calls out dual writes, duplicate processing, and ordering.
+- Represent money as nonnegative integer minor units and currency as an uppercase three-letter ISO code. `order.confirmed.v1` validates that `totalAmountCents` equals `quantity × ticketPriceCents`; the checkout response enforces the same invariant.
+- Event chooses the price when it creates a hold: it locks the event row and snapshots price and currency in the hold transaction. A later catalog price change does not change an existing hold. Order persists those returned values and uses them for the order and confirmation; an idempotent retry returns the original hold snapshot. This gives price changes a deterministic boundary without adding a separate price-version field.
+- Keep message data minimal. The confirmation flow carries only the customer's name and email plus the event/order snapshot needed to render the receipt. Never include card data, passwords, or full customer records.
+- Within a schema version, additive fields must be optional. Consumers accept and ignore unknown fields. Removing or renaming a field, changing its type, or changing its meaning requires a new version; deploy readers for both versions before switching writers, then retire the old reader after old messages are drained.
+- Keep a stable message ID across retries. The Order outbox row ID is reused as the `email.send.v1` `commandId`; Email's unique `notificationKey` (`order-confirmation:{orderId}`) is the inbox deduplication key. The database uniqueness constraints make duplicate delivery intents idempotent.
+- Treat outbox and broker delivery as at least once. Email deduplication and provider idempotency reduce duplicates, but reconciliation is still required because database writes and provider effects cannot share an atomic transaction. The [transactional outbox guidance](https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/transactional-outbox.html) describes the dual-write and duplicate-processing risks.
 
 ## 10. Infrastructure, deployment, and ownership checklist
 

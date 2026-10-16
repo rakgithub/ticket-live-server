@@ -53,7 +53,7 @@ export const CheckoutResponseSchema = z.object({
     quantity: z.number().int().positive(),
     status: z.literal("confirmed"),
     ticketPriceCents: z.number().int().nonnegative(),
-    currencyCode: z.string().length(3),
+    currencyCode: z.string().regex(/^[A-Z]{3}$/),
     totalAmountCents: z.number().int().nonnegative(),
     expiresAt: z.null(),
     createdAt: z.iso.datetime(),
@@ -63,6 +63,15 @@ export const CheckoutResponseSchema = z.object({
     status: z.literal("succeeded"),
     gateway: z.literal("mock"),
   }),
+}).superRefine((response, context) => {
+  const expectedTotal = response.order.quantity * response.order.ticketPriceCents;
+  if (!Number.isSafeInteger(expectedTotal) || response.order.totalAmountCents !== expectedTotal) {
+    context.addIssue({
+      code: "custom",
+      path: ["order", "totalAmountCents"],
+      message: "totalAmountCents must equal quantity multiplied by ticketPriceCents",
+    });
+  }
 });
 
 export const HttpErrorSchema = z.object({ error: z.string().min(1) });

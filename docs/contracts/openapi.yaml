@@ -5,8 +5,10 @@ info:
   description: >-
     Current public behavior recorded before service extraction. Every response
     includes the x-correlation-id response header; callers may provide that UUID
-    on requests to connect logs and traces. The /internal paths are service-only
-    interfaces and must not be exposed to browsers.
+    on requests to connect logs and traces. Message compatibility rules are in
+    AsyncAPI: additive optional fields are allowed within a version; breaking
+    changes use a new version and a dual-read migration. The /internal paths are
+    service-only interfaces and must not be exposed to browsers.
 servers:
   - url: http://localhost:4002
 security:
@@ -427,7 +429,7 @@ paths:
       security:
         - serviceBearerAuth: []
       summary: Create or retrieve an idempotent event inventory hold
-      description: The orderId is the stable idempotency key and equals the returned holdId, so callers can use it to query after a lost response. Existing holds can be retrieved after event cancellation; new holds are rejected.
+      description: The orderId is the stable idempotency key and equals the returned holdId, so callers can use it to query after a lost response. Event locks the event row and snapshots its current unit price and currency when creating the hold; retries return that same snapshot even if catalog pricing later changes. Existing holds can be retrieved after event cancellation; new holds are rejected.
       parameters:
         - in: path
           name: eventId
@@ -713,9 +715,9 @@ components:
             eventId: { type: string, format: uuid }
             quantity: { type: integer, minimum: 1 }
             status: { type: string, const: confirmed }
-            ticketPriceCents: { type: integer, minimum: 0 }
+            ticketPriceCents: { type: integer, minimum: 0, description: Unit price snapshotted by Event when it created the inventory hold. }
             currencyCode: { type: string, pattern: '^[A-Z]{3}$' }
-            totalAmountCents: { type: integer, minimum: 0 }
+            totalAmountCents: { type: integer, minimum: 0, description: Must equal quantity multiplied by ticketPriceCents; amount is in currencyCode minor units. }
             expiresAt: { type: 'null' }
             createdAt: { type: string, format: date-time }
         payment:

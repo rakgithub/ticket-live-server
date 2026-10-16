@@ -40,10 +40,12 @@ export {
   orderConfirmationQueueName,
 } from "./topology.ts";
 export {
+  OrderConfirmedDataSchema,
   EmailSendV1Schema,
   LegacyOrderConfirmedMessageSchema,
   OrderConfirmedV1Schema,
   parseOrderConfirmedMessage,
+  type OrderConfirmedData,
   type EmailSendV1,
   type OrderConfirmedV1,
 } from "./messages.ts";
