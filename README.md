@@ -10,13 +10,33 @@ a simulated confirmation delivery.
 ## Local services
 
 Requirements: Docker with the Compose plugin, pnpm 11, and Node.js 24 or newer.
+Run these commands from the repository root. The root `.env` file is shared by
+all host-started services and is also read by Docker Compose. It is ignored by
+Git; keep your local secrets there and never commit it.
 
 1. Create `.env` and set local database passwords, broker passwords, and
-   independent service tokens:
+   service tokens from the example:
 
    ```sh
    cp .env.example .env
    ```
+
+   For local development, the example values are suitable. In particular,
+   `PUBLIC_API_EVENT_TOKEN` is one shared secret: the Public API reads it to
+   authenticate calls to Event, and Event reads the same value to verify them.
+   Keep one matching entry in the root `.env`; do not put it in frontend code
+   or create separate service-specific `.env` files. The browser calls the
+   Public API at `http://localhost:4002`; that service calls Event at
+   `http://localhost:4003` using this token. For a non-local environment,
+   replace all example credentials with unique generated secrets. For example:
+
+   ```sh
+   openssl rand -hex 32
+   ```
+
+   Copy the generated value into the matching setting in `.env`. The
+   Public API and Event need the same `PUBLIC_API_EVENT_TOKEN`; each other
+   service relationship uses its own token.
 
 2. Start the infrastructure services:
 
@@ -66,6 +86,44 @@ Requirements: Docker with the Compose plugin, pnpm 11, and Node.js 24 or newer.
    Order owns checkout, payment state, reconciliation, and its transactional
    outbox. Keep one Order service instance active until outbox row claims are
    implemented for multi-instance operation.
+
+### Run the services from your host
+
+Use this option when running the Node.js services with `pnpm` instead of the
+Compose `apps` profile. Complete steps 1–4 above first: the database, service
+roles, RabbitMQ users, and migrations are still required. Then install the
+workspace dependencies:
+
+```sh
+pnpm install
+```
+
+Start each command in its own terminal from the repository root:
+
+```sh
+pnpm start:event-service
+pnpm start:email-service
+pnpm start:order-service
+pnpm start
+```
+
+These commands load the root `.env`. Start Event and Order before the Public
+API; Email is needed for confirmation delivery. Order runs its outbox worker
+with the service. Event and Email also run their background work as part of
+their service processes. The host ports are `4002` (Public API), `4003`
+(Event), `4004` (Email), and `4005` (Order). For example, request the public
+event catalog at `http://localhost:4002/events`; the Public API forwards that
+request to Event over its internal authenticated endpoint. Check readiness at
+`/health/ready` on each service port.
+
+If the database reports missing tables, run the migrations in step 4 before
+starting the services. If an internal call reports that authentication is not
+configured, confirm that the root `.env` has a valid `PUBLIC_API_EVENT_TOKEN`
+and restart both the Public API and Event so they load the same value.
+
+Choose either the Compose application command in step 5 or the host commands
+above; do not start both versions at the same time because they use the same
+ports.
 
 The public API, Order, Event, and Email expose `/health/live`, `/health/ready`,
 and `/metrics`. Prometheus scrapes those endpoints and RabbitMQ queue metrics
