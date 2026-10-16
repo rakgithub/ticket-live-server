@@ -1,9 +1,9 @@
 import { and, asc, eq, isNull, lte } from "drizzle-orm";
-import { db } from "../../../src/db/client.ts";
-import { outboxEventsTable } from "../../../src/db/schema/outboxEvents.ts";
-import { ensureEventsIndex, eventsIndexName } from "../../../src/search/eventsIndex.ts";
-import { elasticsearch } from "../../../src/search/client.ts";
-import { createLogger } from "../../../src/observability/logger.ts";
+import { db } from "./db/client.ts";
+import { outboxEventsTable } from "./db/schema/outboxEvents.ts";
+import { ensureEventsIndex, eventsIndexName } from "./search/eventsIndex.ts";
+import { elasticsearch } from "./search/client.ts";
+import { createLogger } from "@ticket-live/runtime";
 
 const logger = createLogger("ticket-live-event-outbox-worker");
 let isProcessing = false;

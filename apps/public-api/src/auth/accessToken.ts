@@ -1,0 +1,17 @@
+import { SignJWT } from "jose";
+import { randomUUID } from "node:crypto";
+import { env } from "@ticket-live/runtime";
+
+const signingKey = new TextEncoder().encode(env.JWT_SECRET);
+
+export async function createAccessToken(userId: string): Promise<string> {
+  return new SignJWT()
+    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+    .setSubject(userId)
+    .setJti(randomUUID())
+    .setIssuedAt()
+    .setIssuer("ticket-live-api")
+    .setAudience("ticket-live-client")
+    .setExpirationTime(env.ACCESS_TOKEN_TTL)
+    .sign(signingKey);
+}

@@ -2,8 +2,15 @@
   "name": "@ticket-live/order-service",
   "private": true,
   "type": "module",
-  "scripts": { "start": "tsx src/main.ts" },
+  "scripts": { "start": "DOTENV_CONFIG_PATH=../../.env node --import tsx/esm src/main.ts", "worker": "DOTENV_CONFIG_PATH=../../.env node --import tsx/esm src/workerMain.ts", "replay-confirmation": "DOTENV_CONFIG_PATH=../../.env node --import tsx/esm src/replayMain.ts" },
   "dependencies": {
-    "@ticket-live/contracts": "workspace:*"
+    "@ticket-live/contracts": "workspace:*",
+    "@ticket-live/runtime": "workspace:*",
+    "amqplib": "^2.2.0",
+    "drizzle-orm": "1.0.0-rc.4",
+    "express": "^5.2.1",
+    "pg": "^8.23.0",
+    "tsx": "^4.23.15",
+    "zod": "^4.6.5"
   }
 }

@@ -431,17 +431,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [candidates]
-                properties:
-                  candidates:
-                    type: array
-                    items:
-                      type: object
-                      required: [id, score]
-                      properties:
-                        id: { type: string, format: uuid }
-                        score: { type: [number, 'null'] }
+                $ref: '#/components/schemas/InternalEventSearchCandidatesResponse'
         '401': { description: Missing or invalid service credentials. }
   /internal/event-cards:
     servers:
@@ -460,7 +450,12 @@ paths:
           name: limit
           schema: { type: integer, minimum: 1, maximum: 10 }
       responses:
-        '200': { description: Fresh, active event cards in candidate order. }
+        '200':
+          description: Fresh, active event cards in candidate order.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalEventChatCardsResponse'
         '401': { description: Missing or invalid service credentials. }
   /internal/events/{eventId}/holds:
     servers:
@@ -832,6 +827,42 @@ components:
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         score: { type: [number, 'null'] }
+    EventSearchCandidate:
+      type: object
+      required: [id, score]
+      properties:
+        id: { type: string, format: uuid }
+        score: { type: [number, 'null'] }
+    InternalEventSearchCandidatesResponse:
+      type: object
+      required: [candidates]
+      properties:
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventSearchCandidate'
+    EventChatCard:
+      type: object
+      required: [id, name, descriptionPreview, location, startsAt, ticketPriceCents, currencyCode, minPeople, maxPeople, servesAlcohol]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, minLength: 1 }
+        descriptionPreview: { type: string }
+        location: { type: string }
+        startsAt: { type: string, format: date-time }
+        ticketPriceCents: { type: integer, minimum: 0 }
+        currencyCode: { type: string, pattern: '^[A-Z]{3}$' }
+        minPeople: { type: integer, minimum: 1 }
+        maxPeople: { type: integer, minimum: 1 }
+        servesAlcohol: { type: boolean }
+    InternalEventChatCardsResponse:
+      type: object
+      required: [cards]
+      properties:
+        cards:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventChatCard'
     Event:
       type: object
       required: [id, name, description, location, minPeople, maxPeople, reservedQuantity, ticketPriceCents, currencyCode, servesAlcohol, isCancelled, userId, startsAt, createdAt, updatedAt]

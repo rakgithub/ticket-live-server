@@ -15,13 +15,13 @@ import {
   type EmailSendV1,
 } from "@ticket-live/contracts";
 import { randomUUID } from "node:crypto";
-import { emailAmqpUrl, env } from "../../../src/config/env.ts";
-import { createLogger } from "../../../src/observability/logger.ts";
+import { emailAmqpUrl, env } from "@ticket-live/runtime";
+import { createLogger } from "@ticket-live/runtime";
 import {
   createMessageTraceContext,
   runWithTraceContext,
-} from "../../../src/observability/traceContext.ts";
-import { startSpan } from "../../../src/observability/traceExporter.ts";
+} from "@ticket-live/runtime";
+import { startSpan } from "@ticket-live/runtime";
 import {
   claimDeliveryIntent,
   recordDeliveryFailure,

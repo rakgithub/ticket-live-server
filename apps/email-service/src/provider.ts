@@ -1,5 +1,5 @@
 import type { EmailSendV1 } from "@ticket-live/contracts";
-import { env } from "../../../src/config/env.ts";
+import { env } from "@ticket-live/runtime";
 
 export type ProviderAcceptance = {
   providerName: string;

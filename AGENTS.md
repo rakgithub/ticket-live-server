@@ -4,7 +4,7 @@
 
 - Read `README.md` for local setup and current behavior.
 
-- This is a pnpm 11 workspace. The running Express API and workers still live in `src/`. `apps/public-api` is a launch alias; the other `apps/*` workspaces are being filled incrementally. `packages/contracts` holds shared wire contracts, not business logic or Drizzle models.
+- This is a pnpm 11 workspace. Runtime code and service-owned Drizzle models live in `apps/public-api`, `apps/order-service`, `apps/event-service`, and `apps/email-service`. `packages/contracts` holds shared wire contracts; `packages/runtime` holds generic environment, internal-auth, and observability helpers. Do not import another app's implementation or database models.
 - Before editing, check `git status` and nearby code. Preserve existing local changes and follow the conventions of the files you touch.
 
 ## Planning and implementation workflow
@@ -27,7 +27,7 @@
 
 - Keep changes focused. Ask the user before a large change or a client-visible contract change. Do not implement migration-plan phases merely because they are described in docs.
 - For API or message changes, update the relevant Zod schemas in `packages/contracts/src/` and the matching OpenAPI or AsyncAPI files in `docs/contracts/`. Keep producers and consumers compatible with existing versioned messages.
-- For database changes, update the owning models in `src/db/schema/` and add a reviewed Drizzle migration under `drizzle/`. Use `MIGRATION_DATABASE_URL` for migrations. Do not run `db:clear`, reset volumes, or apply destructive migrations without explicit approval.
+- For database changes, update the owning models in that service's `apps/<service>/src/db/schema/` and add a reviewed Drizzle migration under `drizzle/`. Use `MIGRATION_DATABASE_URL` for migrations. Do not run `db:clear`, reset volumes, or apply destructive migrations without explicit approval.
 - Preserve checkout idempotency, capacity checks, order/payment state transitions, and transactional outbox behavior. Keep secrets and customer data out of logs. Read the affected service and worker paths before changing a cross-boundary flow.
 
 ## Commands and verification

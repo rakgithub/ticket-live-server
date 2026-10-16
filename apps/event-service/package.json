@@ -2,8 +2,15 @@
   "name": "@ticket-live/event-service",
   "private": true,
   "type": "module",
-  "scripts": { "start": "tsx src/main.ts", "rebuild-index": "tsx src/rebuildIndexMain.ts" },
+  "scripts": { "start": "DOTENV_CONFIG_PATH=../../.env node --import tsx/esm src/main.ts", "rebuild-index": "DOTENV_CONFIG_PATH=../../.env node --import tsx/esm src/rebuildIndexMain.ts" },
   "dependencies": {
-    "@ticket-live/contracts": "workspace:*"
+    "@elastic/elasticsearch": "~9.5.1",
+    "@ticket-live/contracts": "workspace:*",
+    "@ticket-live/runtime": "workspace:*",
+    "drizzle-orm": "1.0.0-rc.4",
+    "express": "^5.2.1",
+    "pg": "^8.23.0",
+    "tsx": "^4.23.15",
+    "zod": "^4.6.5"
   }
 }

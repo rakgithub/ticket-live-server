@@ -108,6 +108,32 @@ export const EventSearchResponseSchema = z.object({
   events: z.array(EventSchema.extend({ score: z.number().nullable() })),
 });
 
+export const EventSearchCandidateSchema = z.object({
+  id: z.uuid(),
+  score: z.number().nullable(),
+});
+
+export const InternalEventSearchCandidatesResponseSchema = z.object({
+  candidates: z.array(EventSearchCandidateSchema),
+});
+
+export const EventChatCardSchema = z.object({
+  id: z.uuid(),
+  name: z.string().min(1),
+  descriptionPreview: z.string(),
+  location: z.string(),
+  startsAt: z.iso.datetime(),
+  ticketPriceCents: z.number().int().nonnegative(),
+  currencyCode: z.string().regex(/^[A-Z]{3}$/),
+  minPeople: z.number().int().positive(),
+  maxPeople: z.number().int().positive(),
+  servesAlcohol: z.boolean(),
+});
+
+export const InternalEventChatCardsResponseSchema = z.object({
+  cards: z.array(EventChatCardSchema),
+});
+
 export const EmailDeliveryStatusSchema = z.enum([
   "queued",
   "sending",
@@ -146,5 +172,7 @@ export type InventoryHoldState = z.infer<typeof InventoryHoldStateSchema>;
 export type InventoryHold = z.infer<typeof InventoryHoldSchema>;
 export type InventoryHoldResponse = z.infer<typeof InventoryHoldResponseSchema>;
 export type Event = z.infer<typeof EventSchema>;
+export type EventSearchCandidate = z.infer<typeof EventSearchCandidateSchema>;
+export type EventChatCard = z.infer<typeof EventChatCardSchema>;
 export type EmailDeliveryStatus = z.infer<typeof EmailDeliveryStatusSchema>;
 export type EmailDelivery = z.infer<typeof EmailDeliverySchema>;

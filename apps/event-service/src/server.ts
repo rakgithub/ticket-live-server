@@ -1,19 +1,24 @@
 import express, { type ErrorRequestHandler } from "express";
 import { z } from "zod";
-import { requireInternalServiceAuth } from "../../../src/auth/requireInternalServiceAuth.ts";
-import { env } from "../../../src/config/env.ts";
-import { pool } from "../../../src/db/client.ts";
-import { createLogger } from "../../../src/observability/logger.ts";
-import { elasticsearch } from "../../../src/search/client.ts";
-import { EventSearchUnavailableError, searchEvents, searchEventCandidates } from "../../../src/services/events/eventsSearchService.ts";
-import { cancelEvent, createEvent, deleteEvent, EventUpdateError, getEventChatCards, getEvents, updateEvent } from "../../../src/services/events/eventsService.ts";
-import { confirmInventoryHold, createInventoryHold, expireExpiredInventoryHolds, getInventoryHold, InventoryHoldError, releaseInventoryHold } from "../../../src/services/events/inventoryHoldsService.ts";
-import { InventoryHoldCreateRequestSchema, InventoryHoldResponseSchema } from "@ticket-live/contracts";
+import { requireInternalServiceAuth } from "@ticket-live/runtime";
+import { env } from "@ticket-live/runtime";
+import { pool } from "./db/client.ts";
+import { createLogger } from "@ticket-live/runtime";
+import { elasticsearch } from "./search/client.ts";
+import { EventSearchUnavailableError, searchEvents, searchEventCandidates } from "./services/eventsSearchService.ts";
+import { cancelEvent, createEvent, deleteEvent, EventUpdateError, getEventChatCards, getEvents, updateEvent } from "./services/eventsService.ts";
+import { confirmInventoryHold, createInventoryHold, expireExpiredInventoryHolds, getInventoryHold, InventoryHoldError, releaseInventoryHold } from "./services/inventoryHoldsService.ts";
+import {
+  InternalEventChatCardsResponseSchema,
+  InternalEventSearchCandidatesResponseSchema,
+  InventoryHoldCreateRequestSchema,
+  InventoryHoldResponseSchema,
+} from "@ticket-live/contracts";
 import { processEventOutboxBatch } from "./outboxWorker.ts";
-import { httpObservabilityMiddleware } from "../../../src/observability/httpMiddleware.ts";
-import { exportOtlpMetrics } from "../../../src/observability/otlpMetricsExporter.ts";
-import { renderHttpMetrics } from "../../../src/observability/metrics.ts";
-import { getInventoryHoldCounters } from "../../../src/services/events/inventoryHoldsService.ts";
+import { httpObservabilityMiddleware } from "@ticket-live/runtime";
+import { exportOtlpMetrics } from "@ticket-live/runtime";
+import { renderHttpMetrics } from "@ticket-live/runtime";
+import { getInventoryHoldCounters } from "./services/inventoryHoldsService.ts";
 
 const logger = createLogger("ticket-live-event-service");
 const app = express();
@@ -95,13 +100,17 @@ app.delete("/internal/events/:eventId", async (req, res) => {
 app.get("/internal/event-search", async (req, res) => {
   const parsed = z.object({ text: z.string().trim().min(1).max(120).optional(), location: z.string().trim().min(1).max(120).optional(), limit: z.coerce.number().int().min(1).max(50).default(10) }).safeParse(req.query);
   if (!parsed.success) { res.status(400).json({ error: "Invalid event search" }); return; }
-  res.json({ candidates: await searchEventCandidates(parsed.data, { limit: parsed.data.limit }) });
+  res.json(InternalEventSearchCandidatesResponseSchema.parse({
+    candidates: await searchEventCandidates(parsed.data, { limit: parsed.data.limit }),
+  }));
 });
 app.get("/internal/event-cards", async (req, res) => {
   const parsed = z.object({ ids: z.string().min(1), limit: z.coerce.number().int().min(1).max(10).default(5) }).safeParse(req.query);
   if (!parsed.success) { res.status(400).json({ error: "Invalid event card request" }); return; }
   const ids = parsed.data.ids.split(","); if (!ids.every((id) => z.uuid().safeParse(id).success)) { res.status(400).json({ error: "Invalid event card request" }); return; }
-  res.json({ cards: await getEventChatCards(ids, { limit: parsed.data.limit }) });
+  res.json(InternalEventChatCardsResponseSchema.parse({
+    cards: await getEventChatCards(ids, { limit: parsed.data.limit }),
+  }));
 });
 app.post("/internal/events/:eventId/holds", async (req, res) => {
   const eventId = z.uuid().safeParse(req.params.eventId); const body = InventoryHoldCreateRequestSchema.safeParse(req.body); const key = z.uuid().safeParse(req.header("idempotency-key"));

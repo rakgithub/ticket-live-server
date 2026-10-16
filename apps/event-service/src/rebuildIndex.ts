@@ -1,8 +1,8 @@
-import { db, pool } from "../../../src/db/client.ts";
-import { eventsTable } from "../../../src/db/schema/events.ts";
-import { elasticsearch } from "../../../src/search/client.ts";
-import { ensureEventsIndex, eventsIndexName, resetEventsIndexReadiness } from "../../../src/search/eventsIndex.ts";
-import { createLogger } from "../../../src/observability/logger.ts";
+import { db, pool } from "./db/client.ts";
+import { eventsTable } from "./db/schema/events.ts";
+import { elasticsearch } from "./search/client.ts";
+import { ensureEventsIndex, eventsIndexName, resetEventsIndexReadiness } from "./search/eventsIndex.ts";
+import { createLogger } from "@ticket-live/runtime";
 
 const logger = createLogger("ticket-live-event-index-rebuild");
 

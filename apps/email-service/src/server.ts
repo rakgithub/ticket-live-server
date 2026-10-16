@@ -1,14 +1,14 @@
 import express, { type ErrorRequestHandler } from "express";
 import { z } from "zod";
 import { EmailDeliveryResponseSchema } from "@ticket-live/contracts";
-import { requireInternalServiceAuth } from "../../../src/auth/requireInternalServiceAuth.ts";
-import { env } from "../../../src/config/env.ts";
-import { pool } from "../../../src/db/client.ts";
-import { createLogger } from "../../../src/observability/logger.ts";
+import { requireInternalServiceAuth } from "@ticket-live/runtime";
+import { env } from "@ticket-live/runtime";
+import { pool } from "./db/client.ts";
+import { createLogger } from "@ticket-live/runtime";
 import { getDeliveryByNotificationKey, getEmailDeliveryMetricRows } from "./deliveryStore.ts";
 import { renderEmailMetrics } from "./metrics.ts";
 import { startEmailWorker } from "./emailWorker.ts";
-import { httpObservabilityMiddleware } from "../../../src/observability/httpMiddleware.ts";
+import { httpObservabilityMiddleware } from "@ticket-live/runtime";
 
 const logger = createLogger("ticket-live-email-service");
 const app = express();

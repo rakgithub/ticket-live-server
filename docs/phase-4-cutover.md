@@ -61,7 +61,7 @@ permits a failed delivery to be retried after its cause is fixed.
 First validate without publishing:
 
 ```sh
-TICKETLIVE_SERVICE=order pnpm exec tsx src/scripts/replayOrderConfirmation.ts \
+pnpm --filter @ticket-live/order-service replay-confirmation -- \
   --order-id 00000000-0000-4000-8000-000000000000 \
   --requested-by on-call-operator \
   --reason INC-123
@@ -71,7 +71,7 @@ After inspecting the dry run and fixing the delivery cause, publish with
 `--apply`:
 
 ```sh
-TICKETLIVE_SERVICE=order pnpm exec tsx src/scripts/replayOrderConfirmation.ts \
+pnpm --filter @ticket-live/order-service replay-confirmation -- \
   --order-id 00000000-0000-4000-8000-000000000000 \
   --requested-by on-call-operator \
   --reason INC-123 \

@@ -192,10 +192,6 @@ The delivery lookup is service-authenticated at
 provider adapter is intentionally not enabled until provider credentials,
 verified sender/domain, webhook handling, and delivery policy are ready.
 
-The RabbitMQ test publisher and consumer under `src/scripts/` are development
-helpers. The test consumer reads from the same queue as the email worker, so do
-not leave it running while processing real confirmation messages.
-
 For deployment configuration, credential ownership, TLS, topology setup, and
 rollback guidance, see [`docs/deployment.md`](docs/deployment.md). For
 monitoring and the audited one-order replay procedure, see

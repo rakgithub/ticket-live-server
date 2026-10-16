@@ -16,13 +16,13 @@ Do not add a vector database, RabbitMQ job, WebSocket server, or separate LangGr
 
 | Area | Existing implementation | Consequence |
 | --- | --- | --- |
-| HTTP | `src/server.ts`, Express 5, `express.json({ limit: "100kb" })` | Add a protected route and handle errors after streaming starts. |
-| Auth | `src/auth/requireAuth.ts` is global below auth routes | Chat inherits JWT auth; use `req.auth.userId` for limits and future conversation ownership. |
-| Search | `src/services/events/eventsSearchService.ts` uses Elasticsearch `multi_match` with `operator: "and"` across name, description, location | Refactor into typed search criteria. Passing the raw sentence “events in Berlin” as `q` is unreliable. |
-| Index | `src/search/eventsIndex.ts`, created through the outbox worker | Search is eventually consistent. The present worker indexes `event.created`; updates, cancellation, and deletion are not covered by the visible index path. |
-| Truth | `src/db/schema/events.ts` in PostgreSQL | Re-read search hits by ID before returning cards; enforce visibility and current status there. |
+| HTTP | `apps/public-api/src/server.ts`, Express 5, `express.json({ limit: "100kb" })` | Add a protected route and handle errors after streaming starts. |
+| Auth | `apps/public-api/src/auth/requireAuth.ts` is global below auth routes | Chat inherits JWT auth; use `req.auth.userId` for limits and future conversation ownership. |
+| Search | `apps/event-service/src/services/eventsSearchService.ts` uses Elasticsearch `multi_match` with `operator: "and"` across name, description, location | Refactor into typed search criteria. Passing the raw sentence “events in Berlin” as `q` is unreliable. |
+| Index | `apps/event-service/src/search/eventsIndex.ts`, created through the outbox worker | Search is eventually consistent. The present worker indexes `event.created`; updates, cancellation, and deletion are not covered by the visible index path. |
+| Truth | `apps/event-service/src/db/schema/events.ts` in PostgreSQL | Re-read search hits by ID before returning cards; enforce visibility and current status there. |
 | Validation | Zod v4 already installed | Validate HTTP input, interpreted criteria, internal events, and public cards. |
-| Rate limits | Login-only limiter in `src/auth/loginRateLimit.ts` | Add a separate chat limiter and active-stream cap. |
+| Rate limits | Login-only limiter in `apps/public-api/src/auth/loginRateLimit.ts` | Add a separate chat limiter and active-stream cap. |
 | Frontend | No frontend project in this repository | Specify a client contract and example behavior; implement UI in its own repo. |
 | Tests | No test runner or test suite configured in `package.json` | Add focused tests for query construction, parsing, streaming, and disconnect behavior. |
 
@@ -95,7 +95,7 @@ Possible `finishReason` values: `completed`, `empty`, `unsupported`. Use `event:
 
 ### 4.2 Search criteria extraction
 
-Create `src/services/chat/interpretEventSearch.ts` with a strict result type:
+Create `apps/public-api/src/chat/interpretEventSearch.ts` with a strict result type:
 
 ```ts
 type EventSearchCriteria = {
@@ -111,7 +111,7 @@ Add table-driven examples for location-only, text-plus-location, generic browse,
 
 ### 4.3 Typed search service
 
-Refactor `src/services/events/eventsSearchService.ts` to accept validated criteria. Build Query DSL in code:
+Refactor `apps/event-service/src/services/eventsSearchService.ts` to accept validated criteria. Build Query DSL in code:
 
 - If `text` exists, query name and description for relevance. If absent, use an appropriate browse query rather than forcing `multi_match` on the full user sentence.
 - Apply `location` as a separate clause; the current `location` is free text, so document whether matching is approximate. A normalized city field is a later schema enhancement if exact city filtering is required.
@@ -125,7 +125,7 @@ The outbox currently indexes `event.created` only. Document and prioritize `even
 
 ### 4.4 Small LangGraph workflow
 
-Implement the graph under `src/chat/` and compile it once at process startup. Suggested nodes:
+Implement the graph under `apps/public-api/src/chat/` and compile it once at process startup. Suggested nodes:
 
 ```text
 START → interpretSearch → searchCandidates → hydrateCards → composeSummary → END
@@ -137,9 +137,9 @@ No checkpointer is required for a truly single-turn phase 1 graph. Do not use an
 
 ### 4.5 Stream handler and cancellation
 
-Add a `chatRoutes` router under global `requireAuth` in `src/server.ts`. A controller validates input, generates a request ID, starts an `AbortController`, and connects response close to graph/provider cancellation. In Node/Express, distinguish a normal completed response from premature disconnect; clean up listeners, timers, and active-stream counters in `finally`.
+Add a `chatRoutes` router under global `requireAuth` in `apps/public-api/src/server.ts`. A controller validates input, generates a request ID, starts an `AbortController`, and connects response close to graph/provider cancellation. In Node/Express, distinguish a normal completed response from premature disconnect; clean up listeners, timers, and active-stream counters in `finally`.
 
-For each frame, serialize one JSON object and escape it through JSON serialization. Respect writable backpressure (`res.write()` returning `false` and waiting for `drain`); stop work if the socket is gone. Bound extraction, search, hydration, and generation time separately, plus one total deadline. Do not start another LLM call to recover a connection that has closed. Errors before stream start use JSON status; errors after stream start use `error` SSE and `res.end()` when possible. Update the global error handler in `src/server.ts` so it does not write JSON after `res.headersSent`.
+For each frame, serialize one JSON object and escape it through JSON serialization. Respect writable backpressure (`res.write()` returning `false` and waiting for `drain`); stop work if the socket is gone. Bound extraction, search, hydration, and generation time separately, plus one total deadline. Do not start another LLM call to recover a connection that has closed. Errors before stream start use JSON status; errors after stream start use `error` SSE and `res.end()` when possible. Update the global error handler in `apps/public-api/src/server.ts` so it does not write JSON after `res.headersSent`.
 
 ### 4.6 Frontend behavior
 
@@ -150,7 +150,7 @@ Render cards from structured data with normal application components. Escape tex
 ### 4.7 Configuration and dependencies
 
 - Add pinned compatible versions of `@langchain/langgraph`, its required core package(s), and the selected model integration or provider SDK. Verify their actual APIs against the versions installed; do not copy examples from a different major version.
-- Add model provider secret, model ID, request deadlines, max results, and optional chat feature flag to `src/config/env.ts` and `.env.example`. Never log secrets or send them to the client.
+- Add model provider secret, model ID, request deadlines, max results, and optional chat feature flag to `packages/runtime/src/config/env.ts` and `.env.example`. Never log secrets or send them to the client.
 - Keep search and database clients already used by the API. No new datastore is required in phase 1.
 - A per-user rate limiter should count requests, while a separate active-stream cap limits simultaneous expensive work. If deployment uses multiple API instances, move shared limits to a shared store; process-memory limits only govern one instance.
 
@@ -210,12 +210,12 @@ Render cards from structured data with normal application components. Escape tex
 ## 9. Suggested implementation order and file map
 
 1. `docs/event-chat-implementation-plan.md`: agree on scope, visibility, timezone, and contract.
-2. `src/config/env.ts`, `.env.example`: provider and chat limits.
-3. `src/services/chat/eventSearchCriteria.ts`: strict criteria schema and normalization; the `interpretSearch` LangGraph node performs model extraction.
-4. `src/services/events/eventsSearchService.ts`: criteria-based Elasticsearch query.
-5. `src/services/events/eventsService.ts` or a dedicated read service: batch public-card hydration from PostgreSQL.
-6. `src/chat/eventDiscoveryGraph.ts`: small compiled graph.
-7. `src/controllers/chat/chatController.ts`, `src/routes/chatRoutes.ts`, `src/server.ts`: authenticated SSE endpoint, cancellation, error handling.
+2. `packages/runtime/src/config/env.ts`, `.env.example`: provider and chat limits.
+3. `apps/public-api/src/chat/eventSearchCriteria.ts`: strict criteria schema and normalization; the `interpretSearch` LangGraph node performs model extraction.
+4. `apps/event-service/src/services/eventsSearchService.ts`: criteria-based Elasticsearch query.
+5. `apps/event-service/src/services/eventsService.ts` or a dedicated read service: batch public-card hydration from PostgreSQL.
+6. `apps/public-api/src/chat/eventDiscoveryGraph.ts`: small compiled graph.
+7. `apps/public-api/src/controllers/chat/chatController.ts`, `apps/public-api/src/routes/chatRoutes.ts`, `apps/public-api/src/server.ts`: authenticated SSE endpoint, cancellation, error handling.
 8. Test runner and focused tests; local transport test through the frontend/proxy path.
 9. Frontend repository: stream parser, UI states, structured cards, abort behavior.
 10. Outbox/index lifecycle work and backfill before production reliance on search freshness.

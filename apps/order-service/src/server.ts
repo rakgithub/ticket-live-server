@@ -6,16 +6,16 @@ import {
   HttpErrorSchema,
   InternalCheckoutRequestSchema,
 } from "@ticket-live/contracts";
-import { requireInternalServiceAuth } from "../../../src/auth/requireInternalServiceAuth.ts";
-import { env } from "../../../src/config/env.ts";
-import { pool } from "../../../src/db/client.ts";
-import { createLogger } from "../../../src/observability/logger.ts";
-import { exportOtlpMetrics } from "../../../src/observability/otlpMetricsExporter.ts";
-import { renderHttpMetrics } from "../../../src/observability/metrics.ts";
-import { httpObservabilityMiddleware } from "../../../src/observability/httpMiddleware.ts";
-import { CheckoutError, checkout } from "../../../src/services/orders/checkoutService.ts";
-import { startOutboxWorker } from "../../../src/workers/outboxWorker.ts";
-import { getPaymentHoldMismatchTotal } from "../../../src/services/orders/reconcileInventory.ts";
+import { requireInternalServiceAuth } from "@ticket-live/runtime";
+import { env } from "@ticket-live/runtime";
+import { pool } from "./db/client.ts";
+import { createLogger } from "@ticket-live/runtime";
+import { exportOtlpMetrics } from "@ticket-live/runtime";
+import { renderHttpMetrics } from "@ticket-live/runtime";
+import { httpObservabilityMiddleware } from "@ticket-live/runtime";
+import { CheckoutError, checkout } from "./services/orders/checkoutService.ts";
+import { startOutboxWorker } from "./workers/outboxWorker.ts";
+import { getPaymentHoldMismatchTotal } from "./services/orders/reconcileInventory.ts";
 
 const logger = createLogger("ticket-live-order-service");
 const app = express();

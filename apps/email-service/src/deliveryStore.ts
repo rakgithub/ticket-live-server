@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import type { EmailSendV1 } from "@ticket-live/contracts";
-import { db } from "../../../src/db/client.ts";
-import { emailDeliveriesTable } from "../../../src/db/schema/emailDeliveries.ts";
+import { db } from "./db/client.ts";
+import { emailDeliveriesTable } from "./db/schema/emailDeliveries.ts";
 import type { ProviderAcceptance } from "./provider.ts";
 
 const terminalStatuses = new Set([
