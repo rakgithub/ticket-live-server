@@ -64,15 +64,6 @@
       ]
     },
     {
-      "id": 7,
-      "type": "timeseries",
-      "title": "Notification Kafka consumer lag",
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 15 },
-      "targets": [
-        { "expr": "ticketlive_kafka_consumer_lag_messages{consumer_group=\"ticketlive-notification\"}", "legendFormat": "lag", "refId": "A" }
-      ]
-    },
-    {
       "id": 8,
       "type": "stat",
       "title": "Payment and hold mismatches",

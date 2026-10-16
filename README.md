@@ -30,8 +30,8 @@ Requirements: Docker with the Compose plugin, and pnpm.
    docker compose run --rm db-role-bootstrap
    ```
 
-   This creates `identity_service`, `order_service`, `event_service`,
-   `email_service`, and `notification_service` schemas with separate local
+   This creates `identity_service`, `order_service`, `event_service`, and
+   `email_service` schemas with separate local
    roles, and a temporary `ticketlive_public_api` runtime login for the current
    integrated app. The Order and Event storage migrations fill their schemas.
    Migrations use `MIGRATION_DATABASE_URL`;

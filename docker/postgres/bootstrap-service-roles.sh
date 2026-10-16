@@ -6,7 +6,6 @@ set -eu
 : "${TICKETLIVE_ORDER_DB_PASSWORD:?order role password is required}"
 : "${TICKETLIVE_EVENT_DB_PASSWORD:?event role password is required}"
 : "${TICKETLIVE_EMAIL_DB_PASSWORD:?email role password is required}"
-: "${TICKETLIVE_NOTIFICATION_DB_PASSWORD:?notification role password is required}"
 
 psql -v ON_ERROR_STOP=1 \
   --set=database_name="$PGDATABASE" \
@@ -15,8 +14,7 @@ psql -v ON_ERROR_STOP=1 \
   --set=identity_password="$TICKETLIVE_IDENTITY_DB_PASSWORD" \
   --set=order_password="$TICKETLIVE_ORDER_DB_PASSWORD" \
   --set=event_password="$TICKETLIVE_EVENT_DB_PASSWORD" \
-  --set=email_password="$TICKETLIVE_EMAIL_DB_PASSWORD" \
-  --set=notification_password="$TICKETLIVE_NOTIFICATION_DB_PASSWORD" <<'SQL'
+  --set=email_password="$TICKETLIVE_EMAIL_DB_PASSWORD" <<'SQL'
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 SELECT format('CREATE ROLE %I LOGIN PASSWORD %L NOINHERIT', 'ticketlive_public_api', :'public_api_password')
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ticketlive_public_api') \gexec
@@ -62,11 +60,4 @@ ALTER ROLE ticketlive_email LOGIN PASSWORD :'email_password' NOINHERIT;
 CREATE SCHEMA IF NOT EXISTS email_service AUTHORIZATION ticketlive_email;
 ALTER SCHEMA email_service OWNER TO ticketlive_email;
 SELECT format('ALTER ROLE %I IN DATABASE %I SET search_path = %I', 'ticketlive_email', :'database_name', 'email_service') \gexec
-
-SELECT format('CREATE ROLE %I LOGIN PASSWORD %L NOINHERIT', 'ticketlive_notification', :'notification_password')
-WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ticketlive_notification') \gexec
-ALTER ROLE ticketlive_notification LOGIN PASSWORD :'notification_password' NOINHERIT;
-CREATE SCHEMA IF NOT EXISTS notification_service AUTHORIZATION ticketlive_notification;
-ALTER SCHEMA notification_service OWNER TO ticketlive_notification;
-SELECT format('ALTER ROLE %I IN DATABASE %I SET search_path = %I', 'ticketlive_notification', :'database_name', 'notification_service') \gexec
 SQL

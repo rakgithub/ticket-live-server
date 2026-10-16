@@ -1,8 +1,0 @@
-{
-  "name": "@ticket-live/notification-service",
-  "private": true,
-  "type": "module",
-  "dependencies": {
-    "@ticket-live/contracts": "workspace:*"
-  }
-}

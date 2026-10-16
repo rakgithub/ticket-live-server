@@ -54,15 +54,6 @@ groups:
           summary: RabbitMQ has dead-lettered email jobs
           description: This signal becomes available after the Email queue and DLQ are configured.
 
-      - alert: TicketLiveNotificationConsumerLag
-        expr: ticketlive_kafka_consumer_lag_messages{consumer_group="ticketlive-notification"} > 1000
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: Notification is more than 1,000 Kafka messages behind
-          description: This signal becomes available when Kafka is introduced in Phase 4.
-
       - alert: TicketLivePaymentHoldMismatch
         expr: ticketlive_payment_hold_mismatch_total > 0
         for: 1m

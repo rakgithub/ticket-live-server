@@ -32,7 +32,6 @@ services:
       TICKETLIVE_ORDER_DB_PASSWORD: ${TICKETLIVE_ORDER_DB_PASSWORD:-local-order-password}
       TICKETLIVE_EVENT_DB_PASSWORD: ${TICKETLIVE_EVENT_DB_PASSWORD:-local-event-password}
       TICKETLIVE_EMAIL_DB_PASSWORD: ${TICKETLIVE_EMAIL_DB_PASSWORD:-local-email-password}
-      TICKETLIVE_NOTIFICATION_DB_PASSWORD: ${TICKETLIVE_NOTIFICATION_DB_PASSWORD:-local-notification-password}
     depends_on:
       postgres:
         condition: service_healthy

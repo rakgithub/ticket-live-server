@@ -12,7 +12,7 @@ channels:
       message:
         $ref: '#/components/messages/OrderConfirmedV1'
   email.send.v1:
-    description: Durable Order-to-Email command queue consumed by the Email service. Order publishes through the ticket-live.email direct exchange with the email.send.v1 routing key; notification ownership may move in Phase 4.
+    description: Durable Order-to-Email command queue consumed by the Email service. Order publishes through the ticket-live.email direct exchange with the email.send.v1 routing key.
     publish:
       operationId: publishEmailSendV1
       message:
@@ -60,7 +60,7 @@ components:
     EmailSendV1:
       name: email.send.v1
       title: Send email
-      summary: Temporary Order-to-Email command; Email owns delivery and deduplication, while Notification may own the command in Phase 4.
+      summary: Order-to-Email command. Email owns delivery and deduplication.
       contentType: application/json
       headers:
         type: object
