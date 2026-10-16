@@ -6,13 +6,13 @@ info:
 defaultContentType: application/json
 channels:
   booking-confirmation-email:
-    description: Legacy durable queue drained by the compatibility consumer during the email command cutover.
+    description: Legacy durable queue drained by the Email service compatibility consumer. Disable that consumer only after this queue is empty.
     publish:
       operationId: publishOrderConfirmedV1
       message:
         $ref: '#/components/messages/OrderConfirmedV1'
   email.send.v1:
-    description: Durable Order-to-Email command queue. Order publishes through the ticket-live.email direct exchange with the email.send.v1 routing key.
+    description: Durable Order-to-Email command queue consumed by the Email service. Order publishes through the ticket-live.email direct exchange with the email.send.v1 routing key; notification ownership may move in Phase 4.
     publish:
       operationId: publishEmailSendV1
       message:
@@ -22,7 +22,7 @@ components:
     OrderConfirmedV1:
       name: order.confirmed.v1
       title: Order confirmed
-      summary: Order-owned business fact; currently adapted to the confirmation queue.
+      summary: Order-owned business fact; temporarily adapted to the legacy confirmation queue and Email command.
       contentType: application/json
       headers:
         type: object
@@ -60,7 +60,7 @@ components:
     EmailSendV1:
       name: email.send.v1
       title: Send email
-      summary: Temporary Order compatibility command, later owned by Notification and consumed by Email.
+      summary: Temporary Order-to-Email command; Email owns delivery and deduplication, while Notification may own the command in Phase 4.
       contentType: application/json
       headers:
         type: object

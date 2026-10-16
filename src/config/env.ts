@@ -2,16 +2,18 @@ import "dotenv/config";
 import { z } from "zod";
 
 const envSchema = z.object({
-  TICKETLIVE_SERVICE: z.enum(["public-api", "event"]).default("public-api"),
+  TICKETLIVE_SERVICE: z.enum(["public-api", "event", "email"]).default("public-api"),
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
   PORT: z.coerce.number().int().min(1).max(65_535).default(4002),
   EVENT_SERVICE_PORT: z.coerce.number().int().min(1).max(65_535).default(4003),
+  EMAIL_SERVICE_PORT: z.coerce.number().int().min(1).max(65_535).default(4004),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
   DATABASE_URL: z.string().min(1).optional(),
   EVENT_SERVICE_DATABASE_URL: z.string().min(1).optional(),
-  ELASTICSEARCH_URL: z.url("ELASTICSEARCH_URL must be a valid URL"),
+  EMAIL_SERVICE_DATABASE_URL: z.string().min(1).optional(),
+  ELASTICSEARCH_URL: z.url("ELASTICSEARCH_URL must be a valid URL").default("http://localhost:9200"),
   GEMINI_API_KEY: z
     .string()
     .transform((value) => value.trim() || undefined)
@@ -33,6 +35,10 @@ const envSchema = z.object({
     .min(100)
     .default(2_000),
   INVENTORY_RECONCILIATION_INTERVAL_MS: z.coerce.number().int().min(1_000).default(60_000),
+  EMAIL_RETRY_DELAY_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(30_000),
+  EMAIL_MAX_RETRIES: z.coerce.number().int().min(0).max(20).default(5),
+  EMAIL_LEGACY_QUEUE_ENABLED: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
+  EMAIL_PROVIDER: z.enum(["fake"]).default("fake"),
   JWT_SECRET: z.string().default(""),
   INTERNAL_SERVICE_TOKEN: z
     .string()
@@ -66,6 +72,13 @@ const envSchema = z.object({
       message: "EVENT_SERVICE_DATABASE_URL is required for the Event service",
     });
   }
+  if (values.TICKETLIVE_SERVICE === "email" && !values.EMAIL_SERVICE_DATABASE_URL) {
+    context.addIssue({
+      code: "custom",
+      path: ["EMAIL_SERVICE_DATABASE_URL"],
+      message: "EMAIL_SERVICE_DATABASE_URL is required for the Email service",
+    });
+  }
   if (values.TICKETLIVE_SERVICE === "public-api" && !values.DATABASE_URL) {
     context.addIssue({ code: "custom", path: ["DATABASE_URL"], message: "DATABASE_URL is required for the public API" });
   }
@@ -74,6 +87,16 @@ const envSchema = z.object({
   }
   if (values.TICKETLIVE_SERVICE === "public-api" && !values.AMQP_URL) {
     context.addIssue({ code: "custom", path: ["AMQP_URL"], message: "AMQP_URL is required for the public API" });
+  }
+  if (values.TICKETLIVE_SERVICE === "email" && !values.AMQP_URL) {
+    context.addIssue({ code: "custom", path: ["AMQP_URL"], message: "AMQP_URL is required for the Email service" });
+  }
+  if (values.NODE_ENV === "production" && values.TICKETLIVE_SERVICE === "email") {
+    context.addIssue({
+      code: "custom",
+      path: ["EMAIL_PROVIDER"],
+      message: "The Email service has no production provider configured; refusing to use the fake provider",
+    });
   }
   if (values.NODE_ENV === "production" && values.TICKETLIVE_SERVICE === "public-api" && !process.env.CORS_ORIGINS) {
     context.addIssue({

@@ -91,6 +91,34 @@ export const EventSearchResponseSchema = z.object({
   events: z.array(EventSchema.extend({ score: z.number().nullable() })),
 });
 
+export const EmailDeliveryStatusSchema = z.enum([
+  "queued",
+  "sending",
+  "accepted_by_provider",
+  "delivered",
+  "bounced",
+  "failed",
+  "simulated",
+]);
+
+export const EmailDeliverySchema = z.object({
+  id: z.uuid(),
+  notificationKey: z.string().min(1),
+  orderId: z.uuid(),
+  status: EmailDeliveryStatusSchema,
+  providerName: z.string().nullable(),
+  providerMessageId: z.string().nullable(),
+  providerAcceptedAt: z.iso.datetime().nullable(),
+  deliveredAt: z.iso.datetime().nullable(),
+  bouncedAt: z.iso.datetime().nullable(),
+  failedAt: z.iso.datetime().nullable(),
+  attempts: z.number().int().nonnegative(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+
+export const EmailDeliveryResponseSchema = z.object({ delivery: EmailDeliverySchema });
+
 export type CheckoutRequest = z.infer<typeof CheckoutRequestSchema>;
 export type CheckoutIdempotencyKey = z.infer<typeof CheckoutIdempotencyKeySchema>;
 export type CheckoutResponse = z.infer<typeof CheckoutResponseSchema>;
@@ -100,3 +128,5 @@ export type InventoryHoldState = z.infer<typeof InventoryHoldStateSchema>;
 export type InventoryHold = z.infer<typeof InventoryHoldSchema>;
 export type InventoryHoldResponse = z.infer<typeof InventoryHoldResponseSchema>;
 export type Event = z.infer<typeof EventSchema>;
+export type EmailDeliveryStatus = z.infer<typeof EmailDeliveryStatusSchema>;
+export type EmailDelivery = z.infer<typeof EmailDeliverySchema>;

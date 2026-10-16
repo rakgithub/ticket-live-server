@@ -1,15 +1,13 @@
 import amqp from "amqplib";
 import {
+  emailSendExchangeName,
+  emailSendQueueName,
+  emailSendRoutingKey,
   EmailSendV1Schema,
   type EmailSendV1,
 } from "@ticket-live/contracts";
 import { env } from "../config/env.ts";
 import { getTraceContext } from "../observability/traceContext.ts";
-
-export const orderConfirmationQueueName = "booking-confirmation-email";
-export const emailSendExchangeName = "ticket-live.email";
-export const emailSendQueueName = "email.send.v1";
-const emailSendRoutingKey = "email.send.v1";
 
 async function assertEmailTopology(channel: amqp.ConfirmChannel): Promise<void> {
   await channel.assertExchange(emailSendExchangeName, "direct", { durable: true });

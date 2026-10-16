@@ -79,22 +79,25 @@ Requirements: Docker with the Compose plugin, and pnpm.
    The API listens at `http://localhost:4002`. The worker has no HTTP port; it
    polls Order's PostgreSQL outbox and publishes email and inventory commands.
 
-7. Start the email worker:
+7. Start the Email service with its own database login:
 
    ```sh
-   pnpm start:email-worker
+   EMAIL_SERVICE_DATABASE_URL=postgres://ticketlive_email:local-email-password@localhost:5433/ticket_live pnpm start:email-service
    ```
 
-   It listens on the `email.send.v1` queue and also drains the legacy
-   `booking-confirmation-email` queue during the cutover. It records simulated
-   email deliveries in PostgreSQL. It does not send real email or generate PDFs
-   yet.
+   It listens on `http://localhost:4004`, consumes the `email.send.v1` queue,
+   and temporarily drains the legacy `booking-confirmation-email` queue while
+   `EMAIL_LEGACY_QUEUE_ENABLED=true`. Delivery records live in `email_service`.
+   The local fake provider records provider acceptance but does not send real
+   email or generate PDFs.
 
 The API exposes `GET /health/live`, `GET /health/ready`, and `GET /metrics`.
 Configure `OTEL_EXPORTER_OTLP_ENDPOINT` to send OTLP traces and metrics to a
 collector. The Phase 0 ownership, contract, and behavior baseline is in
 [`docs/phase-0-baseline.md`](docs/phase-0-baseline.md); current API and message
 schemas are in [`docs/contracts/`](docs/contracts/).
+The Email service migration and queue drain procedure is in
+[`docs/phase-3-cutover.md`](docs/phase-3-cutover.md).
 
 ## Quality checks
 
@@ -187,15 +190,23 @@ applies catalog changes with monotonically increasing versions. Rebuild the
 index from Event's database with
 `EVENT_SERVICE_DATABASE_URL=postgres://ticketlive_event:local-event-password@localhost:5433/ticket_live pnpm event:rebuild-index`.
 
-The email worker validates each `email.send.v1` command, then inserts a row in
-`email_deliveries` with status `simulated`. It uses the logical notification key
-to avoid recording the same delivery twice and continues to consume legacy
-confirmation messages until that queue is drained. To inspect those records:
+The Email service validates each `email.send.v1` command, stores a unique
+delivery intent by `notificationKey`, and acknowledges the RabbitMQ message only
+after the outcome is durably recorded or safely routed for retry. The local fake
+provider records `accepted_by_provider`; that does not mean an email reached an
+inbox. Legacy `simulated` records remain available in the `email_service`
+schema. Delayed retries use `email.send.v1.retry`; poison and exhausted messages
+go to `email.send.v1.dlq`. Inspect delivery records with:
 
 ```sh
 docker compose exec postgres psql -U user -d ticket_live \
-  -c "SELECT notification_key, order_id, recipient_email, status, created_at FROM email_deliveries ORDER BY created_at DESC;"
+  -c "SELECT notification_key, order_id, status, provider_name, provider_message_id, attempts, created_at FROM email_service.email_deliveries ORDER BY created_at DESC;"
 ```
+
+The delivery lookup is service-authenticated at
+`GET http://localhost:4004/internal/deliveries/{notificationKey}`. A real
+provider adapter is intentionally not enabled until provider credentials,
+verified sender/domain, webhook handling, and delivery policy are ready.
 
 The RabbitMQ test publisher and consumer under `src/scripts/` are development
 helpers. The test consumer reads from the same queue as the email worker, so do

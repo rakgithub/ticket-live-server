@@ -12,6 +12,9 @@ export {
   EventListResponseSchema,
   EventCreateResponseSchema,
   EventSearchResponseSchema,
+  EmailDeliveryStatusSchema,
+  EmailDeliverySchema,
+  EmailDeliveryResponseSchema,
   type CheckoutRequest,
   type CheckoutIdempotencyKey,
   type CheckoutResponse,
@@ -21,7 +24,21 @@ export {
   type InventoryHold,
   type InventoryHoldResponse,
   type Event,
+  type EmailDeliveryStatus,
+  type EmailDelivery,
 } from "./http.ts";
+export {
+  emailSendExchangeName,
+  emailSendQueueName,
+  emailSendRoutingKey,
+  emailSendRetryExchangeName,
+  emailSendRetryQueueName,
+  emailSendRetryRoutingKey,
+  emailSendDeadLetterExchangeName,
+  emailSendDeadLetterQueueName,
+  emailSendDeadLetterRoutingKey,
+  orderConfirmationQueueName,
+} from "./topology.ts";
 export {
   EmailSendV1Schema,
   LegacyOrderConfirmedMessageSchema,

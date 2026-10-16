@@ -40,7 +40,7 @@ if (confirmation !== "DELETE ALL DATA") {
     const tables = [
       "order_service.checkout_attempts",
       "order_service.payments",
-      "email_deliveries",
+      "email_service.email_deliveries",
       "order_service.outbox_events",
       "order_service.orders",
       "event_service.inventory_holds",

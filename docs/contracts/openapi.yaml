@@ -628,6 +628,51 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/HttpError' }
+  /internal/deliveries/{notificationKey}:
+    servers:
+      - url: http://localhost:4004
+    get:
+      operationId: getEmailDelivery
+      security:
+        - serviceBearerAuth: []
+      summary: Get delivery status for an Email notification
+      description: Returns delivery metadata without exposing the recipient address or message body.
+      parameters:
+        - in: path
+          name: notificationKey
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 255 }
+      responses:
+        '200':
+          description: Current Email delivery state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmailDeliveryResponse' }
+        '400':
+          description: Invalid notification key.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+        '401':
+          description: Missing or invalid service credentials.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+        '404':
+          description: No delivery exists for this notification key.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+        '500':
+          description: Email delivery lookup failed unexpectedly.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+        '503':
+          description: Internal service authentication is not configured.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
 components:
   securitySchemes:
     bearerAuth:
@@ -783,3 +828,27 @@ components:
           properties:
             postgres: { type: boolean }
             eventService: { type: boolean }
+    EmailDeliveryStatus:
+      type: string
+      enum: [queued, sending, accepted_by_provider, delivered, bounced, failed, simulated]
+    EmailDeliveryResponse:
+      type: object
+      required: [delivery]
+      properties:
+        delivery:
+          type: object
+          required: [id, notificationKey, orderId, status, providerName, providerMessageId, providerAcceptedAt, deliveredAt, bouncedAt, failedAt, attempts, createdAt, updatedAt]
+          properties:
+            id: { type: string, format: uuid }
+            notificationKey: { type: string, minLength: 1 }
+            orderId: { type: string, format: uuid }
+            status: { $ref: '#/components/schemas/EmailDeliveryStatus' }
+            providerName: { type: [string, 'null'] }
+            providerMessageId: { type: [string, 'null'] }
+            providerAcceptedAt: { type: [string, 'null'], format: date-time }
+            deliveredAt: { type: [string, 'null'], format: date-time }
+            bouncedAt: { type: [string, 'null'], format: date-time }
+            failedAt: { type: [string, 'null'], format: date-time }
+            attempts: { type: integer, minimum: 0 }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
