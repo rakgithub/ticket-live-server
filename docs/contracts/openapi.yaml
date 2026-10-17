@@ -103,6 +103,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HttpError'
+  /orders:
+    get:
+      operationId: listOrders
+      summary: List the authenticated user's orders
+      description: Returns all orders owned by the authenticated user, newest first. Customer email and payment gateway identifiers are not included.
+      responses:
+        '200':
+          description: The user's order summaries.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderListResponse'
+        '401':
+          description: Missing or invalid access token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HttpError'
+        '503':
+          description: Order service is unavailable or not configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HttpError'
   /orders/checkout:
     post:
       operationId: checkout
@@ -222,6 +246,98 @@ paths:
         '404': { description: Customer or event is unavailable. }
         '409': { description: Capacity, payment, or idempotency conflict. }
         '503': { description: Checkout outcome is uncertain; retry with the same Idempotency-Key. }
+  /internal/orders:
+    servers:
+      - url: http://localhost:4005
+    get:
+      operationId: orderServiceListOrders
+      security: [{ serviceBearerAuth: [] }]
+      summary: List orders for an authenticated API user
+      description: Private API-to-Order endpoint. The actor ID must come from the Public API's verified user token.
+      parameters:
+        - in: header
+          name: x-actor-user-id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: x-correlation-id
+          required: false
+          schema: { type: string, format: uuid }
+        - in: header
+          name: traceparent
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: Orders belonging to the supplied actor, newest first.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderListResponse' }
+        '400': { description: Invalid actor user ID. }
+        '401': { description: Missing or invalid service credentials. }
+        '503': { description: Internal service authentication is not configured. }
+  /internal/payments:
+    servers:
+      - url: http://localhost:4006
+    post:
+      operationId: paymentServiceCharge
+      security: [{ serviceBearerAuth: [] }]
+      summary: Create or retrieve an idempotent payment for an order
+      description: Private Order-to-Payment endpoint. The stable Order ID is the payment idempotency key.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InternalPaymentChargeRequest' }
+      responses:
+        '200':
+          description: Payment state for this order.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InternalPaymentRecord' }
+        '400': { description: Invalid payment request. }
+        '401': { description: Missing or invalid service credentials. }
+        '409': { description: Order already has a payment with different amount details. }
+  /internal/payments/{orderId}:
+    servers:
+      - url: http://localhost:4006
+    parameters:
+      - in: path
+        name: orderId
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: paymentServiceGetByOrder
+      security: [{ serviceBearerAuth: [] }]
+      summary: Get payment state by Order ID
+      responses:
+        '200':
+          description: Payment state for this order.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InternalPaymentRecord' }
+        '401': { description: Missing or invalid service credentials. }
+        '404': { description: Payment not found. }
+  /internal/payments/{orderId}/cancel:
+    servers:
+      - url: http://localhost:4006
+    parameters:
+      - in: path
+        name: orderId
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      operationId: paymentServiceCancel
+      security: [{ serviceBearerAuth: [] }]
+      summary: Cancel a pending payment for an expired order
+      responses:
+        '200':
+          description: Current payment state after the cancellation request.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InternalPaymentRecord' }
+        '401': { description: Missing or invalid service credentials. }
+        '404': { description: Payment not found. }
   /events/search:
     get:
       operationId: searchEvents
@@ -733,6 +849,38 @@ components:
           type: integer
           minimum: 1
           maximum: 10000
+    OrderListResponse:
+      type: object
+      required: [orders]
+      properties:
+        orders:
+          type: array
+          items: { $ref: '#/components/schemas/OrderSummary' }
+    OrderSummary:
+      type: object
+      required: [id, eventId, event, quantity, status, ticketPriceCents, currencyCode, totalAmountCents, expiresAt, paymentStatus, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        eventId: { type: string, format: uuid }
+        event:
+          type: object
+          required: [name, location, startsAt]
+          properties:
+            name: { type: string }
+            location: { type: string }
+            startsAt: { type: string, format: date-time }
+        quantity: { type: integer, minimum: 1 }
+        status:
+          type: string
+          enum: [initiated, held, pending_payment, confirmed, cancelled, expired, reconciliation_required]
+        ticketPriceCents: { type: integer, minimum: 0 }
+        currencyCode: { type: string, pattern: '^[A-Z]{3}$' }
+        totalAmountCents: { type: integer, minimum: 0 }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        paymentStatus:
+          type: [string, 'null']
+          enum: [pending, succeeded, failed, cancelled, refunded, null]
+        createdAt: { type: string, format: date-time }
     InternalCheckoutRequest:
       type: object
       required: [eventId, quantity, customer]
@@ -745,6 +893,21 @@ components:
           properties:
             name: { type: string, minLength: 1, maxLength: 255 }
             email: { type: string, format: email }
+    InternalPaymentChargeRequest:
+      type: object
+      required: [orderId, amountCents, currencyCode]
+      properties:
+        orderId: { type: string, format: uuid }
+        amountCents: { type: integer, minimum: 0 }
+        currencyCode: { type: string, pattern: '^[A-Z]{3}$' }
+    InternalPaymentRecord:
+      type: object
+      required: [id, orderId, status, gateway]
+      properties:
+        id: { type: string, format: uuid }
+        orderId: { type: string, format: uuid }
+        status: { type: string, enum: [pending, succeeded, failed, cancelled, refunded] }
+        gateway: { type: string }
     CheckoutResponse:
       type: object
       required: [event, order, payment]

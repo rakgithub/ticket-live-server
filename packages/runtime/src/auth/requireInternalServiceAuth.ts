@@ -12,6 +12,8 @@ function expectedCredentials(req: Parameters<RequestHandler>[0]): string[] {
     names = ["public-api-order"];
   } else if (env.TICKETLIVE_SERVICE === "email") {
     names = ["email-internal"];
+  } else if (env.TICKETLIVE_SERVICE === "payment") {
+    names = ["order-payment"];
   } else {
     names = [];
   }

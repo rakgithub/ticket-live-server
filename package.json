@@ -14,6 +14,7 @@
     "start:worker": "pnpm --filter @ticket-live/order-service worker",
     "start:email-service": "pnpm --filter @ticket-live/email-service start",
     "start:email-worker": "pnpm start:email-service",
+    "start:payment-service": "pnpm --filter @ticket-live/payment-service start",
     "start:order-service": "pnpm --filter @ticket-live/order-service start",
     "start:event-service": "pnpm --filter @ticket-live/event-service start",
     "event:rebuild-index": "pnpm --filter @ticket-live/event-service rebuild-index",

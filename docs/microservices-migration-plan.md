@@ -1,29 +1,30 @@
-# Ticket Live: phased migration to three microservices
+# Ticket Live: phased migration to four microservices
 
-Status: Phases 0–4 code/runbooks and the Section 10 deployment baseline are implemented; live queue drain, production Email provider integration, and deployment cutover sign-off remain pending. Updated 16 October 2026.
+Status: Phases 0–4 and the Payment service extraction are implemented; live queue drain, production provider integrations, and deployment cutover sign-off remain pending. Updated 17 October 2026.
 
 ## 1. Outcome and decisions
 
-Extract services in the requested order: **Order**, **Event**, and **Email**. Keep them in one monorepo with separate processes, images, deployments, credentials, migrations, and data ownership. Maintain the existing public API during migration; the current Express app can forward routes until a dedicated gateway has a practical purpose. Migrate one business capability at a time and switch off its old writer before enabling its new writer. This is an incremental migration following the [strangler fig approach](https://docs.aws.amazon.com/prescriptive-guidance/latest/modernization-decomposing-monoliths/strangler-fig.html).
+Extract **Order**, **Event**, **Email**, and **Payment** as separate processes in one monorepo, with separate images, deployments, credentials, migrations, and data ownership. Maintain the existing public API; the current Express app forwards requests to Order. Migrate one business capability at a time and switch off its old writer before enabling its new writer. This is an incremental migration following the [strangler fig approach](https://docs.aws.amazon.com/prescriptive-guidance/latest/modernization-decomposing-monoliths/strangler-fig.html).
 
 Target responsibilities:
 
 | Component | Owns | Does not own |
 | --- | --- | --- |
-| Order service | Checkout endpoint, order state, checkout orchestration, price snapshot, temporary mock payment adapter, order outbox | Event capacity, event catalog, email delivery |
+| Order service | Checkout endpoint, order state, checkout orchestration, price snapshot and payment-status projection, order outbox | Payment records/provider calls, Event capacity, event catalog, email delivery |
 | Event service | Event catalog, ticket capacity, holds/reservations, availability, event search/indexing | Orders, payment attempts, message delivery |
 | Email service | Confirmation email template, provider adapter, delivery attempts/status, email job queue | Changing orders or Event capacity |
-| Remaining application | Identity/auth and event discovery chat initially; public façade during migration | Tables moved to extracted services |
+| Payment service | Payment records, idempotent charge/cancel operations, provider adapter | Order state, inventory, customer identity |
+| Public API | Identity/auth, event discovery chat, public façade | Tables moved to extracted services |
 
 **Notification scope:** This migration has one transactional channel: the order-confirmation email. Order creates the `email.send.v1` command and Email owns the template, provider interaction, delivery retries, and status. Do not introduce a Notification service unless the product later needs multiple channels, user preferences, quiet hours, centralized notification rules, or independent notification ownership.
 
-**Payment scope:** The repository currently uses a mock charge inside checkout. Keep that adapter in Order during this migration so a fourth service does not obscure the three requested phases. Before real charges, implement provider idempotency, webhook verification, reconciliation, refunds, and the late-success path. Extract Payment later if its security, ownership, or release needs justify it. Do not claim this three-service design is production payment-ready while using the mock.
+**Payment scope:** Payment owns the `payment_service.payments` table and the provider adapter. Order remains the checkout coordinator and calls Payment over an authenticated private API using the stable Order ID as the idempotency key. Order stores only a payment ID/status projection. The current provider is still a mock; real charges require provider-side idempotency, webhook verification, reconciliation, refunds, and a late-success path before production use.
 
 **Messaging choice:** RabbitMQ is the only broker in this migration. It carries the actionable `email.send.v1` job, with acknowledgement, retry, and dead-letter handling. PostgreSQL remains the source of truth for orders and inventory; the transactional outbox closes the database-to-broker dual-write gap. Do not add Kafka merely because the system has multiple services. Reconsider a retained event stream only when independently evolving consumers need self-service replay that cannot be met by an audited Order-data export or replay procedure. See [RabbitMQ reliability guidance](https://www.rabbitmq.com/docs/reliability).
 
 ## 2. Current implementation and the seams to cut
 
-The completed boundary replaces the former checkout cross-table transaction with an Order checkout state machine and an Event-owned hold API. Order persists its state and outbox locally, asks Event to create/confirm/release a hold using stable IDs, and reconciles ambiguous outcomes rather than treating a timeout as success or failure. Event owns catalog, capacity, holds, and its Elasticsearch outbox; Email owns the delivery store and RabbitMQ consumer. The mock payment adapter remains in Order.
+The completed boundaries use an Order checkout state machine, an Event-owned hold API, and a Payment-owned payment store/provider adapter. Order persists order state and its outbox locally, asks Event to create/confirm/release a hold using stable IDs, and calls Payment idempotently to charge, query, or cancel. It reconciles ambiguous outcomes rather than treating a timeout as success or failure. Event owns catalog, capacity, holds, and its Elasticsearch outbox; Email owns the delivery store and RabbitMQ consumer.
 
 Order's outbox worker publishes `order.confirmed` as the direct RabbitMQ `email.send.v1` command. Email stores delivery state by its stable `notificationKey`, uses delayed retries and a DLQ, and uses the local fake provider only in development. Event search and chat use Event-owned reads. Identity/auth and event discovery chat remain in the public application. See `apps/order-service/src/services/orders/checkoutService.ts`, `apps/order-service/src/workers/outboxWorker.ts`, `apps/event-service/src/outboxWorker.ts`, and `apps/email-service/src/emailWorker.ts`.
 
@@ -35,7 +36,9 @@ Order's outbox worker publishes `order.confirmed` as the direct RabbitMQ `email.
 Client -> current public API/future gateway -> Order service: POST /orders/checkout
 Order -> Event service: create hold using stable order ID
 Event service -> Order: hold ID, unit price, currency, expiry
-Order: persist order + price snapshot; run mock payment adapter
+Order: persist order + price snapshot
+Order -> Payment service: charge with stable order ID
+Payment service: persist payment and provider result
 Order -> Event service: confirm hold, or release it on failure
 Order: persist final status + outbox record in one local transaction
 Order outbox -> RabbitMQ: email.send.v1
@@ -63,7 +66,7 @@ Exit gate: a local environment can run the current app with service-specific cre
 
 ### 5.1 Boundary and storage
 
-Order owns `orders`, a checkout state/attempt table, its local `outbox_events`, and an `inbox_messages` table if it consumes asynchronous results later. Keep `payments` and the mock adapter local for now. Update the order-status database check constraint to include the new intermediate and `reconciliation_required` states before the new code writes them. Store `eventId` and `userId` as UUID values without foreign keys into Event or Identity. Snapshot event title, start time, unit price, currency, quantity, and customer contact needed for receipts on the order at checkout time. Do not copy passwords or full user profiles. Introduce a client `Idempotency-Key` on checkout with a unique `(userId, key)` constraint and persist the request hash and response/order ID; reuse returns the original result, a different request with the same key is rejected.
+Order owns `orders`, a checkout state/attempt table, its local `outbox_events`, and an `inbox_messages` table if it consumes asynchronous results later. During the initial Order extraction, `payments` and the mock adapter remained local; Phase 5 moves them to Payment. Update the order-status database check constraint to include the new intermediate and `reconciliation_required` states before the new code writes them. Store `eventId` and `userId` as UUID values without foreign keys into Event or Identity. Snapshot event title, start time, unit price, currency, quantity, and customer contact needed for receipts on the order at checkout time. Do not copy passwords or full user profiles. Introduce a client `Idempotency-Key` on checkout with a unique `(userId, key)` constraint and persist the request hash and response/order ID; reuse returns the original result, a different request with the same key is rejected.
 
 ### 5.2 Temporary Event-owned inventory interface
 
@@ -77,7 +80,7 @@ For host/organizer cancellation, the temporary interface rejects new holds after
 
 1. Public `POST /orders/checkout` routes to Order after auth. Order creates a stable order ID and uses it as the hold idempotency key. Request the hold first. If the reply is lost, query the hold by order ID before creating another one.
 2. Persist a `pending_payment` order with hold ID, exact price snapshot, expiry, and checkout idempotency record. If that persistence fails after the hold exists, a reconciler releases orphan holds; the hold TTL is a final safety net.
-3. Run the mock payment adapter outside a database transaction. Keep the existing synchronous response for this migration if feasible. For real payments, use a provider idempotency key and move to `202`/polling or a provider-confirmed flow before charging users. No network call may hold a database lock.
+3. Call the Payment service outside the Order database transaction with the stable order ID. Keep the existing synchronous response while the mock provider is in use. For real payments, use provider idempotency, webhook verification, and a provider-confirmed flow before charging users. No cross-service network call may hold an Order database lock.
 4. On mock failure, atomically transition Order to `cancelled` and record a pending release command in its outbox; call release promptly, then retry through the outbox/reconciler until confirmed. On mock success, request hold confirmation. Only after Event reports a confirmed hold may Order transition to `confirmed` and insert `order.confirmed` into its local outbox in the same transaction.
 5. Resolve ambiguous responses by fetching the hold status. A timeout cannot be interpreted as success or failure. If hold confirmation succeeded but the Order write failed, retry the Order transition; do not release a confirmed hold. If payment succeeded but hold expired before confirmation, enter `reconciliation_required` and prevent normal confirmation; real-money implementations must refund or void.
 6. Order expiry worker moves only its own pending orders to `expired` via guarded state transitions and requests hold release. Event independently expires active holds after TTL. Both sides reconcile by ID and terminal status; neither writes the other's tables.
@@ -119,7 +122,7 @@ Acceptance checks: duplicate jobs create one logical delivery; an email outage d
 
 ## 8. Phase 4 — harden the direct Order-to-Email path
 
-There is no fourth service or second broker in this migration. Phase 4 turns the completed Order, Event, and Email boundaries into an operationally ready three-service system.
+Phase 4 hardens the direct Order-to-Email path. Payment has its own service and does not add a broker or alter that delivery path.
 
 1. Remove the legacy `booking-confirmation-email` compatibility consumer only after the queue is empty and the condition is recorded in the cutover runbook. Set `EMAIL_LEGACY_QUEUE_ENABLED=false` in deployed Email environments after that verified drain; retain the queue declaration only while rollback requires it.
 2. Make RabbitMQ operationally ready: use durable exchanges and queues, persistent messages, publisher confirms, mandatory routing, bounded retry, a DLQ, and an operator replay procedure that preserves `commandId` and `notificationKey`. Before running more than one Order outbox worker, add short-lived row claims or `FOR UPDATE SKIP LOCKED` so two relays do not work the same pending row concurrently.
@@ -149,12 +152,12 @@ The executable Zod contracts are in [`packages/contracts/src/messages.ts`](../pa
 
 | Concern | Minimum implementation |
 | --- | --- |
-| Local stack | `compose.yaml` starts PostgreSQL, Elasticsearch, RabbitMQ, and four app processes. App health checks gate API startup; role bootstrap and migrations are explicit steps. RabbitMQ topology definitions are checked in, and local auto-declaration is disabled by production configuration. |
+| Local stack | `compose.yaml` starts PostgreSQL, Elasticsearch, RabbitMQ, and five app processes. App health checks gate API startup; role bootstrap and migrations are explicit steps. RabbitMQ topology definitions are checked in, and local auto-declaration is disabled by production configuration. |
 | Deployability | A single provider-neutral Docker image selects its process with `TICKETLIVE_SERVICE`; services can be rolled out independently. Run Drizzle migrations as a separate job before app rollout and use expand/contract changes. |
-| Credentials | Public API, Order, Event, and Email have separate PostgreSQL credentials. API-to-Order, API-to-Event, Order-to-Event, and Email internal endpoints use separate tokens. Order and Email have separate RabbitMQ principals; production ACLs are in `docs/deployment.md`. |
+| Credentials | Public API, Order, Event, Email, and Payment have separate PostgreSQL credentials. API-to-Order, API-to-Event, Order-to-Event, Order-to-Payment, and Email internal endpoints use dedicated tokens. Order and Email have separate RabbitMQ principals; production ACLs are in `docs/deployment.md`. |
 | Public routing | The Express API remains the gateway for JWT verification and customer identity lookup. It calls the Order HTTP endpoint with an authenticated actor ID and minimized customer snapshot. Event checks event ownership for resource mutations. |
-| Reliability | Checkout retains a 45-second configurable gateway deadline, stable idempotency key, outbox, and Order reconciliation. Inventory keeps its bounded retry policy; Email remains asynchronous with retry and dead-letter queues. Production broker topology is provisioned before rollout. |
-| Observability | Each service exposes HTTP histograms and readiness. Order exposes unresolved order age, outbox age, and inventory reconciliation mismatch counters; Event exposes active hold age/count, capacity conflicts, and hold expiries; Email exposes delivery outcomes; Prometheus scrapes service and RabbitMQ metrics. Trace context crosses HTTP and message boundaries. |
+| Reliability | Checkout retains a 45-second configurable gateway deadline, stable idempotency key, outbox, and Order reconciliation. Payment deduplicates charges by stable Order ID. Inventory keeps its bounded retry policy; Email remains asynchronous with retry and dead-letter queues. Production broker topology is provisioned before rollout. |
+| Observability | Each service exposes HTTP histograms and readiness. Order exposes unresolved order age, outbox age, and inventory reconciliation mismatch counters; Event exposes active hold age/count, capacity conflicts, and hold expiries; Email exposes delivery outcomes; Prometheus scrapes all five services and RabbitMQ. Trace context crosses HTTP and message boundaries. |
 | Security/privacy | Public JWT issuer/audience checks remain at the API boundary. Runtime database and broker identities are separated, local secrets use environment configuration, production rejects shared internal tokens and automatic topology creation, and checkout forwards only customer name/email. Production TLS terminates at ingress/service networking and uses HTTPS, PostgreSQL TLS, and AMQPS. |
 | Verification | Run typecheck, lint, contract/unit tests, Compose configuration checks, and integration tests against PostgreSQL and RabbitMQ. Exercise concurrent capacity checkout, same-key retry, lost Order response, dependency outage, publisher confirms, and Email retry/DLQ behavior before a production traffic switch. |
 | Rollback | Record per-service owner, image digest, migration position, data snapshot, traffic switch, and reconciliation owner. Existing phase runbooks specify the checkpoint and replay steps; after Order takes writes, replay or reconcile accepted writes before restoring an older writer. |
@@ -168,11 +171,20 @@ claims support concurrent relays.
 
 ## 11. Implementation sequence and completion criteria
 
-Execute phases serially: Phase 0, Order, Event, Email, then direct-path hardening. A phase is complete when the old writer has been disabled, old database privileges are removed, client contracts are respected, operational dashboards and runbooks are live, and the acceptance checks above pass. Do not begin the next extraction with two active owners of the same data.
+Execute phases serially: Phase 0, Order, Event, Email, direct-path hardening, then Payment. A phase is complete when the old writer has been disabled, old database privileges are removed, client contracts are respected, operational dashboards and runbooks are live, and the acceptance checks above pass. Do not begin the next extraction with two active owners of the same data.
 
-After Phase 4, decide separately whether to extract Payment, Identity, search, chat, or a Notification service based on actual ownership and scaling needs. A real Payment service would own provider attempts, webhooks, refunds, and reconciliation, with a payment saga coordinated by Order. A separate API gateway is a later routing decision, not a prerequisite for these three services.
+Phase 5 extracts Payment from Order. Order keeps the checkout saga and payment-status projection; Payment owns its records and provider calls. Identity, search, chat, and Notification remain in the public application unless a later ownership or scaling need justifies another boundary. A separate API gateway is a later routing decision.
 
-## 12. Research basis
+## 12. Phase 5 — extract Payment service
+
+1. Move the `payments` table into `payment_service`, remove its Order foreign key, and preserve existing IDs and statuses in the ownership migration. Payment receives its own database role and runtime.
+2. Move the mock provider adapter behind Payment's authenticated internal API. `POST /internal/payments` uses the stable Order ID as its idempotency key; `GET /internal/payments/{orderId}` supports reconciliation; `POST /internal/payments/{orderId}/cancel` handles expiring orders.
+3. Order remains checkout coordinator. It stores only `payment_id` and `payment_status` as a read projection and calls Payment before confirming the Event hold. Order retries by the same stable ID, never by creating a second payment attempt.
+4. Deploy and migrate Payment before Order begins calling it. Verify data counts/statuses after moving existing payment rows and keep the mock-provider limitation visible in deployment configuration.
+
+Acceptance checks: a repeated charge for one Order returns the existing payment; a different amount or currency for that Order is rejected; Order has no payment-table model or provider adapter; payment expiry/cancellation is coordinated through the internal API; a lost response can be reconciled by Order ID; existing payment IDs and statuses survive the migration.
+
+## 13. Research basis
 
 - [AWS: Strangler fig migration](https://docs.aws.amazon.com/prescriptive-guidance/latest/modernization-decomposing-monoliths/strangler-fig.html) — incremental coexistence, cutover, rollback planning.
 - [AWS: Transactional outbox](https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/transactional-outbox.html) — database/broker dual-write failure and idempotent consumption.

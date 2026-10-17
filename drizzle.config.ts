@@ -8,6 +8,7 @@ export default defineConfig({
     './apps/order-service/src/db/schema/index.ts',
     './apps/event-service/src/db/schema/index.ts',
     './apps/email-service/src/db/schema/index.ts',
+    './apps/payment-service/src/db/schema/index.ts',
   ],
   dialect: 'postgresql',
   dbCredentials: {

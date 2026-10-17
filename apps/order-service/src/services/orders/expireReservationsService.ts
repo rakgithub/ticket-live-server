@@ -3,7 +3,8 @@ import { db } from "../../db/client.ts";
 import { checkoutAttemptsTable } from "../../db/schema/checkoutAttempts.ts";
 import { orderOutboxEventsTable } from "../../db/schema/orderOutboxEvents.ts";
 import { ordersTable } from "../../db/schema/orders.ts";
-import { paymentsTable } from "../../db/schema/payments.ts";
+import { getPaymentClient, PaymentServiceError } from "../../clients/paymentServiceClient.ts";
+import type { InternalPaymentRecord } from "@ticket-live/contracts";
 
 /**
  * Expire Order-owned reservations. Event capacity changes only after the
@@ -25,6 +26,20 @@ export async function expirePendingReservations(): Promise<number> {
 
   let expiredCount = 0;
   for (const { id } of candidates) {
+    let payment: InternalPaymentRecord | undefined;
+    try {
+      payment = await getPaymentClient().getByOrder(id);
+      if (payment.status === "pending") payment = await getPaymentClient().cancel(id);
+    } catch (error) {
+      if (!(error instanceof PaymentServiceError) || error.status !== 404) continue;
+    }
+    if (payment?.status === "succeeded") {
+      await db.update(ordersTable)
+        .set({ paymentId: payment.id, paymentStatus: payment.status, updatedAt: now })
+        .where(eq(ordersTable.id, id));
+      continue;
+    }
+
     const expired = await db.transaction(async (tx) => {
       const [order] = await tx
         .select({ id: ordersTable.id, status: ordersTable.status, expiresAt: ordersTable.expiresAt })
@@ -38,16 +53,14 @@ export async function expirePendingReservations(): Promise<number> {
         return false;
       }
 
-      const [payment] = await tx
-        .select({ id: paymentsTable.id, status: paymentsTable.status })
-        .from(paymentsTable)
-        .where(eq(paymentsTable.orderId, order.id))
-        .for("update");
-      if (payment?.status === "succeeded") return false;
-
       const [updated] = await tx
         .update(ordersTable)
-        .set({ status: "expired", updatedAt: now })
+        .set({
+          status: "expired",
+          paymentId: payment?.id ?? null,
+          paymentStatus: payment?.status ?? null,
+          updatedAt: now,
+        })
         .where(
           and(
             eq(ordersTable.id, order.id),
@@ -56,18 +69,6 @@ export async function expirePendingReservations(): Promise<number> {
         )
         .returning({ id: ordersTable.id });
       if (!updated) return false;
-
-      if (payment?.status === "pending") {
-        await tx
-          .update(paymentsTable)
-          .set({ status: "cancelled", updatedAt: now })
-          .where(
-            and(
-              eq(paymentsTable.id, payment.id),
-              eq(paymentsTable.status, "pending"),
-            ),
-          );
-      }
 
       await tx.insert(orderOutboxEventsTable).values({
         eventType: "inventory.hold.release",

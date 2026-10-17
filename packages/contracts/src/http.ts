@@ -82,6 +82,59 @@ export const CheckoutResponseSchema = z.object({
   }
 });
 
+export const OrderStatusSchema = z.enum([
+  "initiated",
+  "held",
+  "pending_payment",
+  "confirmed",
+  "cancelled",
+  "expired",
+  "reconciliation_required",
+]);
+
+export const PaymentStatusSchema = z.enum([
+  "pending",
+  "succeeded",
+  "failed",
+  "cancelled",
+  "refunded",
+]);
+
+export const InternalPaymentChargeRequestSchema = z.object({
+  orderId: z.uuid(),
+  amountCents: z.number().int().nonnegative(),
+  currencyCode: z.string().regex(/^[A-Z]{3}$/),
+});
+
+export const InternalPaymentRecordSchema = z.object({
+  id: z.uuid(),
+  orderId: z.uuid(),
+  status: PaymentStatusSchema,
+  gateway: z.string().min(1),
+});
+
+export const OrderSummarySchema = z.object({
+  id: z.uuid(),
+  eventId: z.uuid(),
+  event: z.object({
+    name: z.string().min(1),
+    location: z.string(),
+    startsAt: z.iso.datetime(),
+  }),
+  quantity: z.number().int().positive(),
+  status: OrderStatusSchema,
+  ticketPriceCents: z.number().int().nonnegative(),
+  currencyCode: z.string().regex(/^[A-Z]{3}$/),
+  totalAmountCents: z.number().int().nonnegative(),
+  expiresAt: z.iso.datetime().nullable(),
+  paymentStatus: PaymentStatusSchema.nullable(),
+  createdAt: z.iso.datetime(),
+});
+
+export const OrderListResponseSchema = z.object({
+  orders: z.array(OrderSummarySchema),
+});
+
 export const HttpErrorSchema = z.object({ error: z.string().min(1) });
 
 export const EventSchema = z.object({
@@ -166,6 +219,12 @@ export type CheckoutRequest = z.infer<typeof CheckoutRequestSchema>;
 export type CheckoutIdempotencyKey = z.infer<typeof CheckoutIdempotencyKeySchema>;
 export type InternalCheckoutRequest = z.infer<typeof InternalCheckoutRequestSchema>;
 export type CheckoutResponse = z.infer<typeof CheckoutResponseSchema>;
+export type OrderStatus = z.infer<typeof OrderStatusSchema>;
+export type PaymentStatus = z.infer<typeof PaymentStatusSchema>;
+export type InternalPaymentChargeRequest = z.infer<typeof InternalPaymentChargeRequestSchema>;
+export type InternalPaymentRecord = z.infer<typeof InternalPaymentRecordSchema>;
+export type OrderSummary = z.infer<typeof OrderSummarySchema>;
+export type OrderListResponse = z.infer<typeof OrderListResponseSchema>;
 export type InventoryHoldCreateRequest = z.infer<typeof InventoryHoldCreateRequestSchema>;
 export type InventoryHoldIdempotencyKey = z.infer<typeof InventoryHoldIdempotencyKeySchema>;
 export type InventoryHoldState = z.infer<typeof InventoryHoldStateSchema>;

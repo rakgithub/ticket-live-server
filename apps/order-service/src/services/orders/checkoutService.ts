@@ -2,6 +2,7 @@ import {
   CheckoutResponseSchema,
   type CheckoutResponse,
   type InventoryHold,
+  type InternalPaymentRecord,
 } from "@ticket-live/contracts";
 import { and, asc, eq, isNull, lte } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
@@ -9,14 +10,14 @@ import { db } from "../../db/client.ts";
 import { checkoutAttemptsTable } from "../../db/schema/checkoutAttempts.ts";
 import { orderOutboxEventsTable } from "../../db/schema/orderOutboxEvents.ts";
 import { ordersTable } from "../../db/schema/orders.ts";
-import { paymentsTable } from "../../db/schema/payments.ts";
 import { createLogger } from "@ticket-live/runtime";
 import { withTraceMetadata } from "@ticket-live/runtime";
 import {
   getInventoryClient,
   InventoryServiceError,
 } from "../../clients/eventInventoryClient.ts";
-import { mockPaymentProvider } from "../payments/mockPaymentProvider.ts";
+import { getPaymentClient } from "../../clients/paymentServiceClient.ts";
+import { PaymentServiceError } from "../../clients/paymentServiceClient.ts";
 import { releaseInventoryHoldCommand } from "./releaseInventoryHold.ts";
 
 const reconciliationBatchSize = 25;
@@ -97,23 +98,27 @@ export async function checkout(
       throw new CheckoutError("The inventory hold is no longer active", 409);
     }
 
-    const reservation = await persistPendingOrderAndPayment(
+    const reservation = await persistPendingOrder(
       attempt,
       userId,
       customer,
       hold,
     );
-    const paymentResult = await mockPaymentProvider.charge({
-      paymentId: reservation.payment.id,
+    const payment = await getPaymentClient().charge({
+      orderId: reservation.order.id,
       amountCents: reservation.order.totalAmountCents,
       currencyCode: reservation.order.currencyCode,
     });
 
-    if (paymentResult.status === "failed") {
+    await savePaymentProjection(payment);
+    if (payment.status === "pending") {
+      throw new CheckoutError("Payment is still processing; retry with the same key", 503);
+    }
+    if (payment.status === "failed" || payment.status === "cancelled") {
       const releaseEventId = await failPaymentAndQueueRelease(
         attempt.id,
         attempt.orderId,
-        reservation.payment.id,
+        payment,
       );
       if (releaseEventId) await deliverReleasePromptly(releaseEventId, attempt.orderId);
       throw new CheckoutError("Payment was declined", 409);
@@ -122,7 +127,7 @@ export async function checkout(
     const paymentState = await recordPaymentSuccess(
       attempt.id,
       attempt.orderId,
-      reservation.payment.id,
+      payment,
     );
     if (paymentState === "reconciliation_required") {
       throw new CheckoutError(
@@ -358,7 +363,7 @@ function assertHoldMatchesRequest(
   }
 }
 
-async function persistPendingOrderAndPayment(
+async function persistPendingOrder(
   attempt: CheckoutAttempt,
   userId: string,
   customer: { name: string; email: string },
@@ -417,33 +422,25 @@ async function persistPendingOrderAndPayment(
       .returning({ id: ordersTable.id });
     if (!pendingOrder) throw new Error("Order could not enter pending payment state");
 
-    const [payment] = await tx
-      .insert(paymentsTable)
-      .values({
-        orderId: order.id,
-        gateway: "mock",
-        gatewayPaymentId: randomUUID(),
-        amountCents: totalAmountCents,
-        currencyCode: hold.currencyCode,
-        status: "pending",
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning({ id: paymentsTable.id });
-
     await tx
       .update(checkoutAttemptsTable)
       .set({ updatedAt: now })
       .where(and(eq(checkoutAttemptsTable.id, attempt.id), eq(checkoutAttemptsTable.state, "in_progress")));
 
-    return { order, payment };
+    return { order };
   });
+}
+
+async function savePaymentProjection(payment: InternalPaymentRecord): Promise<void> {
+  await db.update(ordersTable)
+    .set({ paymentId: payment.id, paymentStatus: payment.status, updatedAt: new Date() })
+    .where(eq(ordersTable.id, payment.orderId));
 }
 
 async function failPaymentAndQueueRelease(
   attemptId: string,
   orderId: string,
-  paymentId: string,
+  payment: InternalPaymentRecord,
 ): Promise<string | undefined> {
   return db.transaction(async (tx) => {
     const now = new Date();
@@ -461,10 +458,9 @@ async function failPaymentAndQueueRelease(
         .where(and(eq(ordersTable.id, orderId), eq(ordersTable.status, "pending_payment")))
         .returning({ id: ordersTable.id });
       if (cancelled) {
-        await tx
-          .update(paymentsTable)
-          .set({ status: "failed", updatedAt: now })
-          .where(and(eq(paymentsTable.id, paymentId), eq(paymentsTable.status, "pending")));
+        await tx.update(ordersTable)
+          .set({ paymentId: payment.id, paymentStatus: payment.status, updatedAt: now })
+          .where(eq(ordersTable.id, orderId));
         const [command] = await tx
           .insert(orderOutboxEventsTable)
           .values({
@@ -486,7 +482,7 @@ async function failPaymentAndQueueRelease(
 async function recordPaymentSuccess(
   attemptId: string,
   orderId: string,
-  paymentId: string,
+  payment: InternalPaymentRecord,
 ): Promise<"pending_payment" | "confirmed" | "reconciliation_required"> {
   return db.transaction(async (tx) => {
     const now = new Date();
@@ -495,28 +491,14 @@ async function recordPaymentSuccess(
       .from(ordersTable)
       .where(eq(ordersTable.id, orderId))
       .for("update");
-    const [payment] = await tx
-      .select({ status: paymentsTable.status })
-      .from(paymentsTable)
-      .where(eq(paymentsTable.id, paymentId))
-      .for("update");
-    if (!order || !payment) throw new Error("Checkout payment state could not be loaded");
+    if (!order || payment.orderId !== orderId) throw new Error("Checkout payment state could not be loaded");
 
-    if (payment.status === "pending" || payment.status === "cancelled") {
-      const [updatedPayment] = await tx
-        .update(paymentsTable)
-        .set({ status: "succeeded", updatedAt: now })
-        .where(
-          and(
-            eq(paymentsTable.id, paymentId),
-            eq(paymentsTable.status, payment.status),
-          ),
-        )
-        .returning({ id: paymentsTable.id });
-      if (!updatedPayment) throw new Error("Payment success could not be recorded");
-    } else if (payment.status !== "succeeded") {
+    if (payment.status !== "succeeded") {
       throw new Error("Payment is already in a terminal failed state");
     }
+    await tx.update(ordersTable)
+      .set({ paymentId: payment.id, paymentStatus: payment.status, updatedAt: now })
+      .where(eq(ordersTable.id, orderId));
 
     if (order.status === "expired" || order.status === "cancelled") {
       await tx
@@ -604,6 +586,10 @@ async function finalizeConfirmedOrder(
   | { kind: "confirmed"; response: CheckoutResponse }
   | { kind: "reconciliation_required" }
 > {
+  const payment = await getPaymentClient().getByOrder(orderId);
+  if (payment.orderId !== orderId || payment.status !== "succeeded") {
+    throw new Error("Confirmed checkout requires a successful payment");
+  }
   return db.transaction(async (tx) => {
     const now = new Date();
     const [order] = await tx
@@ -622,23 +608,13 @@ async function finalizeConfirmedOrder(
         totalAmountCents: ordersTable.totalAmountCents,
         expiresAt: ordersTable.expiresAt,
         createdAt: ordersTable.createdAt,
+        paymentId: ordersTable.paymentId,
+        paymentStatus: ordersTable.paymentStatus,
       })
       .from(ordersTable)
       .where(eq(ordersTable.id, orderId))
       .for("update");
-    const [payment] = await tx
-      .select({
-        id: paymentsTable.id,
-        status: paymentsTable.status,
-        gateway: paymentsTable.gateway,
-      })
-      .from(paymentsTable)
-      .where(eq(paymentsTable.orderId, orderId))
-      .for("update");
-    if (!order || !payment) throw new Error("Confirmed checkout state could not be loaded");
-    if (payment.status !== "succeeded") {
-      throw new Error("An order cannot be confirmed before payment succeeds");
-    }
+    if (!order) throw new Error("Confirmed checkout state could not be loaded");
 
     if (order.status === "expired" || order.status === "cancelled") {
       await tx
@@ -672,7 +648,13 @@ async function finalizeConfirmedOrder(
     if (order.status !== "confirmed") {
       const [confirmed] = await tx
         .update(ordersTable)
-        .set({ status: "confirmed", expiresAt: null, updatedAt: now })
+        .set({
+          status: "confirmed",
+          expiresAt: null,
+          paymentId: payment.id,
+          paymentStatus: payment.status,
+          updatedAt: now,
+        })
         .where(and(eq(ordersTable.id, orderId), eq(ordersTable.status, "pending_payment")))
         .returning({ id: ordersTable.id });
       if (!confirmed) throw new Error("Order could not enter confirmed state");
@@ -855,7 +837,12 @@ async function reconcileOneCheckoutAttempt(
 ): Promise<void> {
   const inventory = getInventoryClient();
   const [order] = await db
-    .select({ id: ordersTable.id, status: ordersTable.status })
+    .select({
+      id: ordersTable.id,
+      status: ordersTable.status,
+      totalAmountCents: ordersTable.totalAmountCents,
+      currencyCode: ordersTable.currencyCode,
+    })
     .from(ordersTable)
     .where(eq(ordersTable.id, orderId));
 
@@ -924,11 +911,19 @@ async function reconcileOneCheckoutAttempt(
     return;
   }
 
-  const [payment] = await db
-    .select({ status: paymentsTable.status })
-    .from(paymentsTable)
-    .where(eq(paymentsTable.orderId, orderId));
-  if (payment?.status === "succeeded") {
+  let payment: InternalPaymentRecord;
+  try {
+    payment = await getPaymentClient().getByOrder(orderId);
+  } catch (error) {
+    if (!(error instanceof PaymentServiceError) || error.status !== 404) throw error;
+    payment = await getPaymentClient().charge({
+      orderId,
+      amountCents: order.totalAmountCents,
+      currencyCode: order.currencyCode.trim(),
+    });
+  }
+  await savePaymentProjection(payment);
+  if (payment.status === "succeeded") {
     const holdState = await ensureHoldConfirmed(inventory, orderId);
     if (holdState === "confirmed") {
       await finalizeConfirmedOrder(attemptId, orderId);
@@ -944,8 +939,14 @@ async function reconcileOneCheckoutAttempt(
     return;
   }
 
-  // The mock provider has no query API. Leave an unsettled pending payment to
-  // the Order expiry state transition instead of charging it a second time.
+  if (payment.status === "failed" || payment.status === "cancelled") {
+    const releaseEventId = await failPaymentAndQueueRelease(attemptId, orderId, payment);
+    if (releaseEventId) await deliverReleasePromptly(releaseEventId, orderId);
+    return;
+  }
+
+  // Payment Service owns charge deduplication and reports pending when an
+  // earlier request has not reached a terminal gateway result.
   await deferAttempt(attemptId);
 }
 

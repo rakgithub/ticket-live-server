@@ -3,7 +3,8 @@
 This repository provides a provider-neutral container image and local Compose
 stack. It does not include cloud-specific infrastructure definitions. Build the
 root Dockerfile once per revision and roll out the same image independently
-with `TICKETLIVE_SERVICE` set to `public-api`, `order`, `event`, or `email`.
+with `TICKETLIVE_SERVICE` set to `public-api`, `order`, `event`, `email`, or
+`payment`.
 
 ## Deployment order
 
@@ -21,7 +22,7 @@ with `TICKETLIVE_SERVICE` set to `public-api`, `order`, `event`, or `email`.
    Email. Set `RABBITMQ_AUTO_DECLARE_TOPOLOGY=false` on both production
    services; they must fail against missing queues instead of creating
    production topology implicitly.
-5. Roll out Event and Email, then Order, then the public API gateway. Verify
+5. Roll out Event, Email, and Payment, then Order, then the public API gateway. Verify
    each `/health/ready`, `/metrics`, service logs, RabbitMQ consumers, and
    outbox age before sending traffic. The API readiness endpoint checks its
    identity database and Event and Order readiness.
@@ -34,6 +35,11 @@ configuration deliberately rejects it. Do not deploy the Email service to
 production until a real provider, sender verification, webhook policy, and
 delivery/replay behavior have been implemented and reviewed.
 
+Payment currently uses a mock provider. The extraction gives it separate data
+ownership and an idempotent internal API, but it is not ready to process real
+charges until provider idempotency, webhook verification, late-success handling,
+refunds, and reconciliation are implemented and reviewed.
+
 ## Runtime identity and secret assignment
 
 Use a secrets manager or equivalent runtime secret injection. Do not store
@@ -45,17 +51,22 @@ fallback and is rejected for production.
 | Runtime | Database credential | Internal credential | Broker credential |
 | --- | --- | --- | --- |
 | Public API | `DATABASE_URL` with identity/public tables only | `PUBLIC_API_ORDER_TOKEN`, `PUBLIC_API_EVENT_TOKEN` | None |
-| Order | `ORDER_SERVICE_DATABASE_URL` for `order_service` | `ORDER_EVENT_TOKEN` | `ORDER_AMQP_URL` user may publish only to `ticket-live.email` |
+| Order | `ORDER_SERVICE_DATABASE_URL` for `order_service` | `ORDER_EVENT_TOKEN`, `ORDER_PAYMENT_TOKEN` | `ORDER_AMQP_URL` user may publish only to `ticket-live.email` |
 | Event | `EVENT_SERVICE_DATABASE_URL` for `event_service` | `PUBLIC_API_EVENT_TOKEN`, `ORDER_EVENT_TOKEN` | None |
 | Email | `EMAIL_SERVICE_DATABASE_URL` for `email_service` | `EMAIL_INTERNAL_TOKEN` | `EMAIL_AMQP_URL` user consumes Email commands and publishes retry/dead-letter messages |
+| Payment | `PAYMENT_SERVICE_DATABASE_URL` for `payment_service` | `ORDER_PAYMENT_TOKEN` | None |
 
-Set `ORDER_SERVICE_URL` and `EVENT_SERVICE_URL` to private service addresses.
-Set `INVENTORY_SERVICE_URL` on Order to its private Event address as well. URL
+Set `ORDER_SERVICE_URL`, `EVENT_SERVICE_URL`, and `PAYMENT_SERVICE_URL` to
+private service addresses. Set `INVENTORY_SERVICE_URL` on Order to its private
+Event address as well. Order calls Payment with a stable Order ID and Payment
+owns charge idempotency and provider results. URL
 encode reserved characters in database and broker credentials.
 The public API is the HTTP gateway: it verifies the user's JWT, reads the
 customer name and email from its identity database, and passes only those
 fields plus the authenticated user ID to Order. Order owns checkout state and
 checks Event resource state through the authenticated Order-to-Event token.
+Payment is the source of truth for payment records; Order keeps a payment ID
+and status projection for order reads and reconciliation.
 Preserve issuer/audience validation on public JWTs and keep authorization rules
 in the owning domain service for any future resource-owned endpoint.
 

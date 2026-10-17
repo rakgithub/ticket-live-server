@@ -16,12 +16,22 @@ import { httpObservabilityMiddleware } from "@ticket-live/runtime";
 import { CheckoutError, checkout } from "./services/orders/checkoutService.ts";
 import { startOutboxWorker } from "./workers/outboxWorker.ts";
 import { getPaymentHoldMismatchTotal } from "./services/orders/reconcileInventory.ts";
+import { listOrdersForUser } from "./services/orders/listOrdersService.ts";
 
 const logger = createLogger("ticket-live-order-service");
 const app = express();
 app.use(httpObservabilityMiddleware);
 app.use(express.json({ limit: "100kb" }));
 app.use("/internal", requireInternalServiceAuth);
+
+app.get("/internal/orders", async (req, res) => {
+  const userId = z.uuid().safeParse(req.header("x-actor-user-id"));
+  if (!userId.success) {
+    res.status(400).json({ error: "Invalid actor user ID" });
+    return;
+  }
+  res.json(await listOrdersForUser(userId.data));
+});
 
 app.post("/internal/orders/checkout", async (req, res) => {
   const body = InternalCheckoutRequestSchema.safeParse(req.body);

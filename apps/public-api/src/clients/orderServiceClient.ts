@@ -2,9 +2,11 @@ import {
   CheckoutIdempotencyKeySchema,
   CheckoutResponseSchema,
   HttpErrorSchema,
+  OrderListResponseSchema,
   type CheckoutRequest,
   type CheckoutResponse,
   type InternalCheckoutRequest,
+  type OrderListResponse,
 } from "@ticket-live/contracts";
 import { z } from "zod";
 import { env, serviceCredential } from "@ticket-live/runtime";
@@ -51,6 +53,15 @@ export class OrderServiceClient {
       body,
       userId,
       CheckoutIdempotencyKeySchema.parse(idempotencyKey),
+    ));
+  }
+
+  async listOrders(userId: string): Promise<OrderListResponse> {
+    return OrderListResponseSchema.parse(await this.request(
+      "GET",
+      "/internal/orders",
+      undefined,
+      userId,
     ));
   }
 

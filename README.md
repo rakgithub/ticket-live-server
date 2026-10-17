@@ -2,8 +2,9 @@
 
 Ticket Live is a Node.js API for an event ticket booking app. Users can register
 and sign in, create and search events, and check out tickets. Event owns the
-catalog and inventory in PostgreSQL, Order owns orders, and Event uses
-Elasticsearch for event search. Checkout uses a mock payment provider. After an order is confirmed, a background
+catalog and inventory in PostgreSQL, Order owns orders, Payment owns payment
+records and the provider boundary, and Event uses Elasticsearch for search.
+Checkout uses a mock payment provider. After an order is confirmed, a background
 worker publishes a message through RabbitMQ; the email worker currently records
 a simulated confirmation delivery.
 
@@ -35,8 +36,11 @@ Git; keep your local secrets there and never commit it.
    ```
 
    Copy the generated value into the matching setting in `.env`. The
-   Public API and Event need the same `PUBLIC_API_EVENT_TOKEN`; each other
-   service relationship uses its own token.
+   Public API and Event need the same `PUBLIC_API_EVENT_TOKEN`. Order and Event
+   also need the same `ORDER_EVENT_TOKEN` for inventory requests. These are
+   separate credentials: setting one does not configure the other. The other
+   service relationships use their matching token settings in `.env` as well.
+   Order and Payment share `ORDER_PAYMENT_TOKEN` for the private payment API.
 
 2. Start the infrastructure services:
 
@@ -74,17 +78,18 @@ Git; keep your local secrets there and never commit it.
    install dependencies with `pnpm install` and run
    `pnpm exec drizzle-kit migrate` using `MIGRATION_DATABASE_URL`.
 
-5. Build and start all four applications:
+5. Build and start all five applications:
 
    ```sh
    docker compose --profile apps up -d --build
    ```
 
    The public API listens at `http://localhost:4002`, Event at `:4003`, Email
-   at `:4004`, and Order at `:4005`. The API checks user identity and passes a
+   at `:4004`, Order at `:4005`, and Payment at `:4006`. The API checks user identity and passes a
    minimized customer snapshot to Order over the private service interface.
-   Order owns checkout, payment state, reconciliation, and its transactional
-   outbox. Keep one Order service instance active until outbox row claims are
+   Order owns checkout orchestration, order state, reconciliation, and its
+   transactional outbox. Payment owns payment records and provider calls. Keep
+   one Order service instance active until outbox row claims are
    implemented for multi-instance operation.
 
 ### Run the services from your host
@@ -104,14 +109,15 @@ Start each command in its own terminal from the repository root:
 pnpm start:event-service
 pnpm start:email-service
 pnpm start:order-service
+pnpm start:payment-service
 pnpm start
 ```
 
-These commands load the root `.env`. Start Event and Order before the Public
-API; Email is needed for confirmation delivery. Order runs its outbox worker
+These commands load the root `.env`. Start Event and Payment before Order, and
+start Order and Event before the Public API; Email is needed for confirmation delivery. Order runs its outbox worker
 with the service. Event and Email also run their background work as part of
 their service processes. The host ports are `4002` (Public API), `4003`
-(Event), `4004` (Email), and `4005` (Order). For example, request the public
+(Event), `4004` (Email), `4005` (Order), and `4006` (Payment). For example, request the public
 event catalog at `http://localhost:4002/events`; the Public API forwards that
 request to Event over its internal authenticated endpoint. Check readiness at
 `/health/ready` on each service port.
@@ -119,7 +125,10 @@ request to Event over its internal authenticated endpoint. Check readiness at
 If the database reports missing tables, run the migrations in step 4 before
 starting the services. If an internal call reports that authentication is not
 configured, confirm that the root `.env` has a valid `PUBLIC_API_EVENT_TOKEN`
-and restart both the Public API and Event so they load the same value.
+and restart both the Public API and Event so they load the same value. If Order
+logs an inventory authentication error during its maintenance pass, check that
+`ORDER_EVENT_TOKEN` is set and matches the value Event uses, then restart both
+Order and Event.
 
 Choose either the Compose application command in step 5 or the host commands
 above; do not start both versions at the same time because they use the same
@@ -182,9 +191,10 @@ Creating an event now inserts both the event row and an `event.created` row in
 the event ID and a JSON snapshot for indexing. If either insert fails,
 PostgreSQL rolls back both inserts.
 
-After a checkout payment succeeds, the order, payment, and `order.confirmed`
-row in `order_service.outbox_events` are committed in one PostgreSQL
-transaction. The API can then return
+After a checkout payment succeeds, Payment stores its record in
+`payment_service.payments`. Order stores the returned payment ID and status
+projection with the `order.confirmed` row in `order_service.outbox_events` in
+one local PostgreSQL transaction. The API can then return
 the confirmed order without waiting for RabbitMQ or background email handling.
 Only the Order database login can read or write this schema; the public API
 loads the customer name and email from its identity store and sends those
@@ -218,9 +228,10 @@ while the first is still processing, or the same key with different checkout
 details, gets `409 Conflict`.
 
 Checkout creates one stable Order ID before requesting its Event hold. Order
-persists the hold's event and price snapshots, then calls the mock payment
-adapter outside the database transaction. A successful payment is recorded
-before Order asks Event to confirm the hold; only a confirmed hold can produce
+persists the hold's event and price snapshots, then calls Payment using the
+Order ID as the payment idempotency key. Payment stores the provider result;
+Order records the returned payment ID and status before asking Event to confirm
+the hold. Only a confirmed hold can produce
 the `order.confirmed` outbox message. Payment failures and expired pending
 orders persist `inventory.hold.release` commands in the Order outbox. The
 Order service retries those commands and reconciles stale checkout attempts.
@@ -254,7 +265,7 @@ For deployment configuration, credential ownership, TLS, topology setup, and
 rollback guidance, see [`docs/deployment.md`](docs/deployment.md). For
 monitoring and the audited one-order replay procedure, see
 [`docs/phase-4-cutover.md`](docs/phase-4-cutover.md). The local Prometheus
-configuration scrapes all four services, including Order outbox state, Event
+configuration scrapes all five services, including Order outbox state, Event
 hold age/conflicts/expiry, Email delivery outcomes, and RabbitMQ queue depth and
 oldest-message timestamps. RabbitMQ's Prometheus endpoint is exposed on
 `localhost:15692` for local monitoring.

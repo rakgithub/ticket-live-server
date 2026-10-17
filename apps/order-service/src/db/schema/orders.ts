@@ -22,6 +22,8 @@ export const ordersTable = orderSchema.table(
     userId: uuid("user_id").notNull(),
     quantity: integer("quantity").notNull(),
     status: text("status").notNull(),
+    paymentId: uuid("payment_id"),
+    paymentStatus: text("payment_status"),
     // Checkout snapshots keep later catalog/profile changes from rewriting a receipt.
     eventNameSnapshot: text("event_name_snapshot").notNull(),
     eventLocationSnapshot: text("event_location_snapshot").notNull(),
@@ -49,6 +51,10 @@ export const ordersTable = orderSchema.table(
     ),
     check("orders_ticket_price_nonnegative", sql`${table.ticketPriceCents} >= 0`),
     check("orders_total_nonnegative", sql`${table.totalAmountCents} >= 0`),
+    check(
+      "orders_payment_status_valid",
+      sql`${table.paymentStatus} IS NULL OR ${table.paymentStatus} IN ('pending', 'succeeded', 'failed', 'cancelled', 'refunded')`,
+    ),
     index("orders_event_id_idx").on(table.eventId),
     index("orders_user_id_idx").on(table.userId),
   ],

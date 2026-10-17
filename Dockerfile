@@ -6,7 +6,7 @@ COPY . .
 RUN pnpm install --prod --frozen-lockfile
 
 ENV NODE_ENV=production
-EXPOSE 4002 4003 4004 4005
+EXPOSE 4002 4003 4004 4005 4006
 USER node
 ENTRYPOINT ["/app/docker/entrypoint.sh"]
 

@@ -63,3 +63,21 @@ export async function postCheckout(req: Request, res: Response): Promise<void> {
     throw error;
   }
 }
+
+export async function getOrders(req: Request, res: Response): Promise<void> {
+  if (!req.auth) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+
+  try {
+    res.status(200).json(await getOrderServiceClient().listOrders(req.auth.userId));
+  } catch (error) {
+    if (error instanceof OrderServiceError) {
+      logger.error("Order list request failed", { statusCode: error.status });
+      res.status(error.status).json({ error: error.message });
+      return;
+    }
+    throw error;
+  }
+}

@@ -2,7 +2,7 @@ import "dotenv/config";
 import { z } from "zod";
 
 const envSchema = z.object({
-  TICKETLIVE_SERVICE: z.enum(["public-api", "order", "event", "email"]).default("public-api"),
+  TICKETLIVE_SERVICE: z.enum(["public-api", "order", "event", "email", "payment"]).default("public-api"),
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
@@ -10,11 +10,13 @@ const envSchema = z.object({
   ORDER_SERVICE_PORT: z.coerce.number().int().min(1).max(65_535).default(4005),
   EVENT_SERVICE_PORT: z.coerce.number().int().min(1).max(65_535).default(4003),
   EMAIL_SERVICE_PORT: z.coerce.number().int().min(1).max(65_535).default(4004),
+  PAYMENT_SERVICE_PORT: z.coerce.number().int().min(1).max(65_535).default(4006),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
   DATABASE_URL: z.string().min(1).optional(),
   ORDER_SERVICE_DATABASE_URL: z.string().min(1).optional(),
   EVENT_SERVICE_DATABASE_URL: z.string().min(1).optional(),
   EMAIL_SERVICE_DATABASE_URL: z.string().min(1).optional(),
+  PAYMENT_SERVICE_DATABASE_URL: z.string().min(1).optional(),
   ELASTICSEARCH_URL: z.url("ELASTICSEARCH_URL must be a valid URL").default("http://localhost:9200"),
   GEMINI_API_KEY: z
     .string()
@@ -58,8 +60,11 @@ const envSchema = z.object({
   PUBLIC_API_EVENT_TOKEN: z.string().regex(/^[\x21-\x7E]{32,}$/).optional(),
   ORDER_EVENT_TOKEN: z.string().regex(/^[\x21-\x7E]{32,}$/).optional(),
   EMAIL_INTERNAL_TOKEN: z.string().regex(/^[\x21-\x7E]{32,}$/).optional(),
+  ORDER_PAYMENT_TOKEN: z.string().regex(/^[\x21-\x7E]{32,}$/).optional(),
   ORDER_SERVICE_URL: z.url().default("http://localhost:4005"),
   ORDER_SERVICE_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(45_000),
+  PAYMENT_SERVICE_URL: z.url().default("http://localhost:4006"),
+  PAYMENT_SERVICE_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(45_000),
   INVENTORY_SERVICE_URL: z.url().default("http://localhost:4003"),
   EVENT_SERVICE_URL: z.url().default("http://localhost:4003"),
   ACCESS_TOKEN_TTL: z
@@ -99,6 +104,9 @@ const envSchema = z.object({
       message: "EMAIL_SERVICE_DATABASE_URL is required for the Email service",
     });
   }
+  if (values.TICKETLIVE_SERVICE === "payment" && !values.PAYMENT_SERVICE_DATABASE_URL) {
+    context.addIssue({ code: "custom", path: ["PAYMENT_SERVICE_DATABASE_URL"], message: "PAYMENT_SERVICE_DATABASE_URL is required for the Payment service" });
+  }
   if (values.TICKETLIVE_SERVICE === "public-api" && !values.DATABASE_URL) {
     context.addIssue({ code: "custom", path: ["DATABASE_URL"], message: "DATABASE_URL is required for the public API" });
   }
@@ -129,10 +137,12 @@ const envSchema = z.object({
     const dedicatedTokens: Array<[string, string | undefined]> = values.TICKETLIVE_SERVICE === "public-api"
       ? [["PUBLIC_API_ORDER_TOKEN", values.PUBLIC_API_ORDER_TOKEN], ["PUBLIC_API_EVENT_TOKEN", values.PUBLIC_API_EVENT_TOKEN]]
       : values.TICKETLIVE_SERVICE === "order"
-        ? [["ORDER_EVENT_TOKEN", values.ORDER_EVENT_TOKEN]]
-        : values.TICKETLIVE_SERVICE === "event"
-          ? [["PUBLIC_API_EVENT_TOKEN", values.PUBLIC_API_EVENT_TOKEN], ["ORDER_EVENT_TOKEN", values.ORDER_EVENT_TOKEN]]
-          : [["EMAIL_INTERNAL_TOKEN", values.EMAIL_INTERNAL_TOKEN]];
+        ? [["PUBLIC_API_ORDER_TOKEN", values.PUBLIC_API_ORDER_TOKEN], ["ORDER_EVENT_TOKEN", values.ORDER_EVENT_TOKEN], ["ORDER_PAYMENT_TOKEN", values.ORDER_PAYMENT_TOKEN]]
+      : values.TICKETLIVE_SERVICE === "event"
+        ? [["PUBLIC_API_EVENT_TOKEN", values.PUBLIC_API_EVENT_TOKEN], ["ORDER_EVENT_TOKEN", values.ORDER_EVENT_TOKEN]]
+        : values.TICKETLIVE_SERVICE === "payment"
+          ? [["ORDER_PAYMENT_TOKEN", values.ORDER_PAYMENT_TOKEN]]
+        : [["EMAIL_INTERNAL_TOKEN", values.EMAIL_INTERNAL_TOKEN]];
     for (const [name, token] of dedicatedTokens) {
       if (!token || /replace-with|change-me|^local-/i.test(token)) {
         context.addIssue({ code: "custom", path: [name], message: `${name} must be a unique production secret; INTERNAL_SERVICE_TOKEN is development-only` });
@@ -161,6 +171,8 @@ const envSchema = z.object({
       ? "DATABASE_URL"
       : values.TICKETLIVE_SERVICE === "order"
         ? "ORDER_SERVICE_DATABASE_URL"
+      : values.TICKETLIVE_SERVICE === "payment"
+        ? "PAYMENT_SERVICE_DATABASE_URL"
         : values.TICKETLIVE_SERVICE === "event"
           ? "EVENT_SERVICE_DATABASE_URL"
           : "EMAIL_SERVICE_DATABASE_URL";
@@ -168,6 +180,8 @@ const envSchema = z.object({
       ? values.DATABASE_URL
       : values.TICKETLIVE_SERVICE === "order"
         ? values.ORDER_SERVICE_DATABASE_URL
+      : values.TICKETLIVE_SERVICE === "payment"
+        ? values.PAYMENT_SERVICE_DATABASE_URL
         : values.TICKETLIVE_SERVICE === "event"
           ? values.EVENT_SERVICE_DATABASE_URL
           : values.EMAIL_SERVICE_DATABASE_URL;
@@ -185,6 +199,7 @@ const envSchema = z.object({
     }
     if (values.TICKETLIVE_SERVICE === "order") {
       requireTls(values.INVENTORY_SERVICE_URL, "INVENTORY_SERVICE_URL", "https:");
+      requireTls(values.PAYMENT_SERVICE_URL, "PAYMENT_SERVICE_URL", "https:");
       requireTls(values.ORDER_AMQP_URL, "ORDER_AMQP_URL", "amqps:");
     }
     if (values.TICKETLIVE_SERVICE === "email") {
@@ -220,6 +235,7 @@ export type InternalCredential =
   | "public-api-order"
   | "public-api-event"
   | "order-event"
+  | "order-payment"
   | "email-internal";
 
 /** Local fallback is intentionally disabled in production. */
@@ -228,6 +244,7 @@ export function serviceCredential(name: InternalCredential): string | undefined 
     "public-api-order": env.PUBLIC_API_ORDER_TOKEN,
     "public-api-event": env.PUBLIC_API_EVENT_TOKEN,
     "order-event": env.ORDER_EVENT_TOKEN,
+    "order-payment": env.ORDER_PAYMENT_TOKEN,
     "email-internal": env.EMAIL_INTERNAL_TOKEN,
   }[name];
   return dedicated ?? (env.NODE_ENV === "production" ? undefined : env.INTERNAL_SERVICE_TOKEN);

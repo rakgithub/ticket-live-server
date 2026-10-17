@@ -6,6 +6,7 @@ set -eu
 : "${TICKETLIVE_ORDER_DB_PASSWORD:?order role password is required}"
 : "${TICKETLIVE_EVENT_DB_PASSWORD:?event role password is required}"
 : "${TICKETLIVE_EMAIL_DB_PASSWORD:?email role password is required}"
+: "${TICKETLIVE_PAYMENT_DB_PASSWORD:?payment role password is required}"
 
 psql -v ON_ERROR_STOP=1 \
   --set=database_name="$PGDATABASE" \
@@ -14,7 +15,8 @@ psql -v ON_ERROR_STOP=1 \
   --set=identity_password="$TICKETLIVE_IDENTITY_DB_PASSWORD" \
   --set=order_password="$TICKETLIVE_ORDER_DB_PASSWORD" \
   --set=event_password="$TICKETLIVE_EVENT_DB_PASSWORD" \
-  --set=email_password="$TICKETLIVE_EMAIL_DB_PASSWORD" <<'SQL'
+  --set=email_password="$TICKETLIVE_EMAIL_DB_PASSWORD" \
+  --set=payment_password="$TICKETLIVE_PAYMENT_DB_PASSWORD" <<'SQL'
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 SELECT format('CREATE ROLE %I LOGIN PASSWORD %L NOINHERIT', 'ticketlive_public_api', :'public_api_password')
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ticketlive_public_api') \gexec
@@ -67,4 +69,16 @@ ALTER ROLE ticketlive_email LOGIN PASSWORD :'email_password' NOINHERIT;
 CREATE SCHEMA IF NOT EXISTS email_service AUTHORIZATION ticketlive_email;
 ALTER SCHEMA email_service OWNER TO ticketlive_email;
 SELECT format('ALTER ROLE %I IN DATABASE %I SET search_path = %I', 'ticketlive_email', :'database_name', 'email_service') \gexec
+
+SELECT format('CREATE ROLE %I LOGIN PASSWORD %L NOINHERIT', 'ticketlive_payment', :'payment_password')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ticketlive_payment') \gexec
+ALTER ROLE ticketlive_payment LOGIN PASSWORD :'payment_password' NOINHERIT;
+CREATE SCHEMA IF NOT EXISTS payment_service AUTHORIZATION ticketlive_payment;
+ALTER SCHEMA payment_service OWNER TO ticketlive_payment;
+SELECT format('ALTER ROLE %I IN DATABASE %I SET search_path = %I', 'ticketlive_payment', :'database_name', 'payment_service') \gexec
+GRANT USAGE ON SCHEMA payment_service TO ticketlive_payment;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA payment_service TO ticketlive_payment;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA payment_service TO ticketlive_payment;
+SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA payment_service GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ticketlive_payment', :'migration_role') \gexec
+SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA payment_service GRANT USAGE, SELECT ON SEQUENCES TO ticketlive_payment', :'migration_role') \gexec
 SQL

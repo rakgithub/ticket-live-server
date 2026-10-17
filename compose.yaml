@@ -38,6 +38,7 @@ services:
       TICKETLIVE_ORDER_DB_PASSWORD: ${TICKETLIVE_ORDER_DB_PASSWORD:-local-order-password}
       TICKETLIVE_EVENT_DB_PASSWORD: ${TICKETLIVE_EVENT_DB_PASSWORD:-local-event-password}
       TICKETLIVE_EMAIL_DB_PASSWORD: ${TICKETLIVE_EMAIL_DB_PASSWORD:-local-email-password}
+      TICKETLIVE_PAYMENT_DB_PASSWORD: ${TICKETLIVE_PAYMENT_DB_PASSWORD:-local-payment-password}
     depends_on:
       postgres:
         condition: service_healthy
@@ -151,7 +152,11 @@ services:
       ORDER_SERVICE_DATABASE_URL: postgres://ticketlive_order:${TICKETLIVE_ORDER_DB_PASSWORD:-local-order-password}@postgres:5432/${POSTGRES_DB:-ticket_live}
       EVENT_SERVICE_URL: http://event-service:4003
       INVENTORY_SERVICE_URL: http://event-service:4003
+      PAYMENT_SERVICE_URL: http://payment-service:4006
+      PAYMENT_SERVICE_TIMEOUT_MS: ${PAYMENT_SERVICE_TIMEOUT_MS:-45000}
+      PUBLIC_API_ORDER_TOKEN: ${PUBLIC_API_ORDER_TOKEN:-local-public-api-order-token-change-me-32chars}
       ORDER_EVENT_TOKEN: ${ORDER_EVENT_TOKEN:-local-order-event-token-change-me-32chars}
+      ORDER_PAYMENT_TOKEN: ${ORDER_PAYMENT_TOKEN:-local-order-payment-token-change-me-32chars}
       ORDER_AMQP_URL: amqp://${TICKETLIVE_ORDER_AMQP_USER:-ticketlive-order}:${TICKETLIVE_ORDER_AMQP_PASSWORD:-local-order-amqp-password}@rabbitmq:5672/%2F
       RABBITMQ_AUTO_DECLARE_TOPOLOGY: "true"
       OUTBOX_POLL_INTERVAL_MS: ${OUTBOX_POLL_INTERVAL_MS:-2000}
@@ -162,6 +167,8 @@ services:
       postgres:
         condition: service_healthy
       event-service:
+        condition: service_healthy
+      payment-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4005/health/ready').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
@@ -192,6 +199,29 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4004/health/ready').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  payment-service:
+    <<: *app-image
+    profiles: ["apps"]
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      TICKETLIVE_SERVICE: payment
+      PAYMENT_SERVICE_PORT: 4006
+      PAYMENT_SERVICE_DATABASE_URL: postgres://ticketlive_payment:${TICKETLIVE_PAYMENT_DB_PASSWORD:-local-payment-password}@postgres:5432/${POSTGRES_DB:-ticket_live}
+      ORDER_PAYMENT_TOKEN: ${ORDER_PAYMENT_TOKEN:-local-order-payment-token-change-me-32chars}
+      MOCK_PAYMENT_DELAY_MS: ${MOCK_PAYMENT_DELAY_MS:-1500}
+      MOCK_PAYMENT_FAILURE_RATE: ${MOCK_PAYMENT_FAILURE_RATE:-0}
+    ports:
+      - "127.0.0.1:4006:4006"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4006/health/ready').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
       interval: 10s
       timeout: 3s
       retries: 12
