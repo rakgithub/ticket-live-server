@@ -25,13 +25,12 @@
 
 ## Working in this repo
 
-- Keep changes focused. Ask the user before a large change or a client-visible contract change. Do not implement migration-plan phases merely because they are described in docs.
+- Keep changes focused. Ask the user before a large change or a client-visible contract change.
 - For API or message changes, update the relevant Zod schemas in `packages/contracts/src/` and the matching OpenAPI or AsyncAPI files in `docs/contracts/`. Keep producers and consumers compatible with existing versioned messages.
 - For database changes, update the owning models in that service's `apps/<service>/src/db/schema/` and add a reviewed Drizzle migration under `drizzle/`. Use `MIGRATION_DATABASE_URL` for migrations. Do not run `db:clear`, reset volumes, or apply destructive migrations without explicit approval.
 - Preserve checkout idempotency, capacity checks, order/payment state transitions, and transactional outbox behavior. Keep secrets and customer data out of logs. Read the affected service and worker paths before changing a cross-boundary flow.
 
 ## Commands and verification
-
 - Install dependencies: `pnpm install`. Local infrastructure and startup steps are in `README.md`.
 - API: `pnpm start`; outbox worker: `pnpm start:worker`; email worker: `pnpm start:email-worker`.
 - Quality checks: `pnpm lint`, `pnpm typecheck`, and `pnpm test`.

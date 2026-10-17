@@ -1,0 +1,11 @@
+{
+  "name": "@ticket-live/analytics-service",
+  "private": true,
+  "type": "module",
+  "scripts": { "start": "DOTENV_CONFIG_PATH=../../.env node --import tsx/esm src/main.ts" },
+  "dependencies": {
+    "@ticket-live/runtime": "workspace:*",
+    "express": "^5.2.1",
+    "tsx": "^4.23.15"
+  }
+}

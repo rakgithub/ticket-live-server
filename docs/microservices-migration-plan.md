@@ -2,6 +2,12 @@
 
 Status: Phases 0–4 and the Payment service extraction are implemented; live queue drain, production provider integrations, and deployment cutover sign-off remain pending. Updated 17 October 2026.
 
+Ticketing and Analytics are scaffold-only workspaces on ports 4007 and 4008.
+They expose health and generic HTTP metrics, but do not yet issue QR tickets,
+ingest sales, own data, or participate in business flows. The four-service
+ownership plan below excludes them until their behavior, contracts, and data
+ownership are planned separately.
+
 ## 1. Outcome and decisions
 
 Extract **Order**, **Event**, **Email**, and **Payment** as separate processes in one monorepo, with separate images, deployments, credentials, migrations, and data ownership. Maintain the existing public API; the current Express app forwards requests to Order. Migrate one business capability at a time and switch off its old writer before enabling its new writer. This is an incremental migration following the [strangler fig approach](https://docs.aws.amazon.com/prescriptive-guidance/latest/modernization-decomposing-monoliths/strangler-fig.html).
@@ -152,12 +158,12 @@ The executable Zod contracts are in [`packages/contracts/src/messages.ts`](../pa
 
 | Concern | Minimum implementation |
 | --- | --- |
-| Local stack | `compose.yaml` starts PostgreSQL, Elasticsearch, RabbitMQ, and five app processes. App health checks gate API startup; role bootstrap and migrations are explicit steps. RabbitMQ topology definitions are checked in, and local auto-declaration is disabled by production configuration. |
+| Local stack | `compose.yaml` starts PostgreSQL, Elasticsearch, RabbitMQ, and seven app processes. App health checks gate API startup; role bootstrap and migrations are explicit steps. RabbitMQ topology definitions are checked in, and local auto-declaration is disabled by production configuration. |
 | Deployability | A single provider-neutral Docker image selects its process with `TICKETLIVE_SERVICE`; services can be rolled out independently. Run Drizzle migrations as a separate job before app rollout and use expand/contract changes. |
 | Credentials | Public API, Order, Event, Email, and Payment have separate PostgreSQL credentials. API-to-Order, API-to-Event, Order-to-Event, Order-to-Payment, and Email internal endpoints use dedicated tokens. Order and Email have separate RabbitMQ principals; production ACLs are in `docs/deployment.md`. |
 | Public routing | The Express API remains the gateway for JWT verification and customer identity lookup. It calls the Order HTTP endpoint with an authenticated actor ID and minimized customer snapshot. Event checks event ownership for resource mutations. |
 | Reliability | Checkout retains a 45-second configurable gateway deadline, stable idempotency key, outbox, and Order reconciliation. Payment deduplicates charges by stable Order ID. Inventory keeps its bounded retry policy; Email remains asynchronous with retry and dead-letter queues. Production broker topology is provisioned before rollout. |
-| Observability | Each service exposes HTTP histograms and readiness. Order exposes unresolved order age, outbox age, and inventory reconciliation mismatch counters; Event exposes active hold age/count, capacity conflicts, and hold expiries; Email exposes delivery outcomes; Prometheus scrapes all five services and RabbitMQ. Trace context crosses HTTP and message boundaries. |
+| Observability | Each service exposes HTTP histograms and readiness. Order exposes unresolved order age, outbox age, and inventory reconciliation mismatch counters; Event exposes active hold age/count, capacity conflicts, and hold expiries; Email exposes delivery outcomes; Ticketing and Analytics expose generic HTTP metrics only; Prometheus scrapes all seven services and RabbitMQ. Trace context crosses HTTP and message boundaries. |
 | Security/privacy | Public JWT issuer/audience checks remain at the API boundary. Runtime database and broker identities are separated, local secrets use environment configuration, production rejects shared internal tokens and automatic topology creation, and checkout forwards only customer name/email. Production TLS terminates at ingress/service networking and uses HTTPS, PostgreSQL TLS, and AMQPS. |
 | Verification | Run typecheck, lint, contract/unit tests, Compose configuration checks, and integration tests against PostgreSQL and RabbitMQ. Exercise concurrent capacity checkout, same-key retry, lost Order response, dependency outage, publisher confirms, and Email retry/DLQ behavior before a production traffic switch. |
 | Rollback | Record per-service owner, image digest, migration position, data snapshot, traffic switch, and reconciliation owner. Existing phase runbooks specify the checkpoint and replay steps; after Order takes writes, replay or reconcile accepted writes before restoring an older writer. |

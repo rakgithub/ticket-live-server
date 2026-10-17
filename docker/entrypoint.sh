@@ -7,5 +7,7 @@ case "${TICKETLIVE_SERVICE:-public-api}" in
   event) exec node --import tsx/esm /app/apps/event-service/src/main.ts ;;
   email) exec node --import tsx/esm /app/apps/email-service/src/main.ts ;;
   payment) exec node --import tsx/esm /app/apps/payment-service/src/main.ts ;;
+  ticketing) exec node --import tsx/esm /app/apps/ticketing-service/src/main.ts ;;
+  analytics) exec node --import tsx/esm /app/apps/analytics-service/src/main.ts ;;
   *) echo "Unknown TICKETLIVE_SERVICE: ${TICKETLIVE_SERVICE}" >&2; exit 64 ;;
 esac

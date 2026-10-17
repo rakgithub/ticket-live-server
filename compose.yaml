@@ -226,6 +226,38 @@ services:
       timeout: 3s
       retries: 12
 
+  ticketing-service:
+    <<: *app-image
+    profiles: ["apps"]
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      TICKETLIVE_SERVICE: ticketing
+      TICKETING_SERVICE_PORT: 4007
+    ports:
+      - "127.0.0.1:4007:4007"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4007/health/ready').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  analytics-service:
+    <<: *app-image
+    profiles: ["apps"]
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      TICKETLIVE_SERVICE: analytics
+      ANALYTICS_SERVICE_PORT: 4008
+    ports:
+      - "127.0.0.1:4008:4008"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4008/health/ready').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
   public-api:
     <<: *app-image
     profiles: ["apps"]

@@ -302,6 +302,18 @@ importers:
         specifier: ^5.0.4
         version: 5.0.4(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.4)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
 
+  apps/analytics-service:
+    dependencies:
+      '@ticket-live/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
+      express:
+        specifier: ^5.2.1
+        version: 5.2.1(supports-color@5.5.0)
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
+
   apps/email-service:
     dependencies:
       '@ticket-live/contracts':
@@ -451,6 +463,18 @@ importers:
       zod:
         specifier: ^4.6.5
         version: 4.6.5
+
+  apps/ticketing-service:
+    dependencies:
+      '@ticket-live/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
+      express:
+        specifier: ^5.2.1
+        version: 5.2.1(supports-color@5.5.0)
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
 
   packages/contracts:
     dependencies:

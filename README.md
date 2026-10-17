@@ -78,14 +78,17 @@ Git; keep your local secrets there and never commit it.
    install dependencies with `pnpm install` and run
    `pnpm exec drizzle-kit migrate` using `MIGRATION_DATABASE_URL`.
 
-5. Build and start all five applications:
+5. Build and start all seven applications:
 
    ```sh
    docker compose --profile apps up -d --build
    ```
 
    The public API listens at `http://localhost:4002`, Event at `:4003`, Email
-   at `:4004`, Order at `:4005`, and Payment at `:4006`. The API checks user identity and passes a
+   at `:4004`, Order at `:4005`, Payment at `:4006`, Ticketing at `:4007`, and
+   Analytics at `:4008`. Ticketing and Analytics are service skeletons with health
+   and metrics endpoints; QR ticket creation and sales analytics are not implemented yet.
+   The API checks user identity and passes a
    minimized customer snapshot to Order over the private service interface.
    Order owns checkout orchestration, order state, reconciliation, and its
    transactional outbox. Payment owns payment records and provider calls. Keep
@@ -110,6 +113,8 @@ pnpm start:event-service
 pnpm start:email-service
 pnpm start:order-service
 pnpm start:payment-service
+pnpm start:ticketing-service
+pnpm start:analytics-service
 pnpm start
 ```
 
@@ -117,7 +122,8 @@ These commands load the root `.env`. Start Event and Payment before Order, and
 start Order and Event before the Public API; Email is needed for confirmation delivery. Order runs its outbox worker
 with the service. Event and Email also run their background work as part of
 their service processes. The host ports are `4002` (Public API), `4003`
-(Event), `4004` (Email), `4005` (Order), and `4006` (Payment). For example, request the public
+(Event), `4004` (Email), `4005` (Order), `4006` (Payment), `4007` (Ticketing),
+and `4008` (Analytics). For example, request the public
 event catalog at `http://localhost:4002/events`; the Public API forwards that
 request to Event over its internal authenticated endpoint. Check readiness at
 `/health/ready` on each service port.
@@ -265,9 +271,10 @@ For deployment configuration, credential ownership, TLS, topology setup, and
 rollback guidance, see [`docs/deployment.md`](docs/deployment.md). For
 monitoring and the audited one-order replay procedure, see
 [`docs/phase-4-cutover.md`](docs/phase-4-cutover.md). The local Prometheus
-configuration scrapes all five services, including Order outbox state, Event
+configuration scrapes all seven services, including Order outbox state, Event
 hold age/conflicts/expiry, Email delivery outcomes, and RabbitMQ queue depth and
-oldest-message timestamps. RabbitMQ's Prometheus endpoint is exposed on
+oldest-message timestamps. Ticketing and Analytics currently expose HTTP metrics
+only. RabbitMQ's Prometheus endpoint is exposed on
 `localhost:15692` for local monitoring.
 
 ## Event search

@@ -2,7 +2,7 @@ import "dotenv/config";
 import { z } from "zod";
 
 const envSchema = z.object({
-  TICKETLIVE_SERVICE: z.enum(["public-api", "order", "event", "email", "payment"]).default("public-api"),
+  TICKETLIVE_SERVICE: z.enum(["public-api", "order", "event", "email", "payment", "ticketing", "analytics"]).default("public-api"),
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
@@ -11,6 +11,8 @@ const envSchema = z.object({
   EVENT_SERVICE_PORT: z.coerce.number().int().min(1).max(65_535).default(4003),
   EMAIL_SERVICE_PORT: z.coerce.number().int().min(1).max(65_535).default(4004),
   PAYMENT_SERVICE_PORT: z.coerce.number().int().min(1).max(65_535).default(4006),
+  TICKETING_SERVICE_PORT: z.coerce.number().int().min(1).max(65_535).default(4007),
+  ANALYTICS_SERVICE_PORT: z.coerce.number().int().min(1).max(65_535).default(4008),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
   DATABASE_URL: z.string().min(1).optional(),
   ORDER_SERVICE_DATABASE_URL: z.string().min(1).optional(),
@@ -142,7 +144,9 @@ const envSchema = z.object({
         ? [["PUBLIC_API_EVENT_TOKEN", values.PUBLIC_API_EVENT_TOKEN], ["ORDER_EVENT_TOKEN", values.ORDER_EVENT_TOKEN]]
         : values.TICKETLIVE_SERVICE === "payment"
           ? [["ORDER_PAYMENT_TOKEN", values.ORDER_PAYMENT_TOKEN]]
-        : [["EMAIL_INTERNAL_TOKEN", values.EMAIL_INTERNAL_TOKEN]];
+        : values.TICKETLIVE_SERVICE === "email"
+          ? [["EMAIL_INTERNAL_TOKEN", values.EMAIL_INTERNAL_TOKEN]]
+          : [];
     for (const [name, token] of dedicatedTokens) {
       if (!token || /replace-with|change-me|^local-/i.test(token)) {
         context.addIssue({ code: "custom", path: [name], message: `${name} must be a unique production secret; INTERNAL_SERVICE_TOKEN is development-only` });
@@ -167,28 +171,30 @@ const envSchema = z.object({
         context.addIssue({ code: "custom", path: [name], message: `${name} must use ${protocol} in production` });
       }
     };
-    const databaseSetting = values.TICKETLIVE_SERVICE === "public-api"
-      ? "DATABASE_URL"
-      : values.TICKETLIVE_SERVICE === "order"
-        ? "ORDER_SERVICE_DATABASE_URL"
-      : values.TICKETLIVE_SERVICE === "payment"
-        ? "PAYMENT_SERVICE_DATABASE_URL"
-        : values.TICKETLIVE_SERVICE === "event"
-          ? "EVENT_SERVICE_DATABASE_URL"
-          : "EMAIL_SERVICE_DATABASE_URL";
-    const databaseUrl = values.TICKETLIVE_SERVICE === "public-api"
-      ? values.DATABASE_URL
-      : values.TICKETLIVE_SERVICE === "order"
-        ? values.ORDER_SERVICE_DATABASE_URL
-      : values.TICKETLIVE_SERVICE === "payment"
-        ? values.PAYMENT_SERVICE_DATABASE_URL
-        : values.TICKETLIVE_SERVICE === "event"
-          ? values.EVENT_SERVICE_DATABASE_URL
-          : values.EMAIL_SERVICE_DATABASE_URL;
-    let databaseSslMode = "";
-    try { databaseSslMode = databaseUrl ? new URL(databaseUrl).searchParams.get("sslmode") ?? "" : ""; } catch { /* Report below. */ }
-    if (!new Set(["require", "verify-ca", "verify-full"]).has(databaseSslMode)) {
-      context.addIssue({ code: "custom", path: [databaseSetting], message: "The service database URL must set sslmode=require or stricter in production" });
+    if (values.TICKETLIVE_SERVICE !== "ticketing" && values.TICKETLIVE_SERVICE !== "analytics") {
+      const databaseSetting = values.TICKETLIVE_SERVICE === "public-api"
+        ? "DATABASE_URL"
+        : values.TICKETLIVE_SERVICE === "order"
+          ? "ORDER_SERVICE_DATABASE_URL"
+        : values.TICKETLIVE_SERVICE === "payment"
+          ? "PAYMENT_SERVICE_DATABASE_URL"
+          : values.TICKETLIVE_SERVICE === "event"
+            ? "EVENT_SERVICE_DATABASE_URL"
+            : "EMAIL_SERVICE_DATABASE_URL";
+      const databaseUrl = values.TICKETLIVE_SERVICE === "public-api"
+        ? values.DATABASE_URL
+        : values.TICKETLIVE_SERVICE === "order"
+          ? values.ORDER_SERVICE_DATABASE_URL
+        : values.TICKETLIVE_SERVICE === "payment"
+          ? values.PAYMENT_SERVICE_DATABASE_URL
+          : values.TICKETLIVE_SERVICE === "event"
+            ? values.EVENT_SERVICE_DATABASE_URL
+            : values.EMAIL_SERVICE_DATABASE_URL;
+      let databaseSslMode = "";
+      try { databaseSslMode = databaseUrl ? new URL(databaseUrl).searchParams.get("sslmode") ?? "" : ""; } catch { /* Report below. */ }
+      if (!new Set(["require", "verify-ca", "verify-full"]).has(databaseSslMode)) {
+        context.addIssue({ code: "custom", path: [databaseSetting], message: "The service database URL must set sslmode=require or stricter in production" });
+      }
     }
     if (values.TICKETLIVE_SERVICE === "public-api") {
       requireTls(values.EVENT_SERVICE_URL, "EVENT_SERVICE_URL", "https:");
