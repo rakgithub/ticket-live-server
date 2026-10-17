@@ -13,6 +13,7 @@
     "eventStartsAt": "2026-11-13T19:00:00Z",
     "quantity": 2,
     "totalAmountCents": 8000,
-    "currencyCode": "EUR"
+    "currencyCode": "EUR",
+    "ticketsUrl": "http://localhost:3000/my-tickets"
   }
 }

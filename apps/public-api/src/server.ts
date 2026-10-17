@@ -7,6 +7,7 @@ import { requireAuth } from "./auth/requireAuth.ts";
 import authRoutes from "./routes/authRoutes.ts";
 import eventsRoutes from "./routes/eventsRoutes.ts";
 import ordersRoutes from "./routes/ordersRoutes.ts";
+import ticketsRoutes from "./routes/ticketsRoutes.ts";
 import chatRoutes from "./routes/chatRoutes.ts";
 import healthRoutes from "./routes/healthRoutes.ts";
 import { httpObservabilityMiddleware } from "@ticket-live/runtime";
@@ -39,6 +40,7 @@ app.use("/", authRoutes);
 app.use(requireAuth);
 app.use("/events", eventsRoutes);
 app.use("/orders", ordersRoutes);
+app.use("/tickets", ticketsRoutes);
 app.use("/chat", chatRoutes);
 
 app.use((_req, res) => {

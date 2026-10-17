@@ -1,12 +1,10 @@
 # Ticket Live: phased migration to four microservices
 
-Status: Phases 0–4 and the Payment service extraction are implemented; live queue drain, production provider integrations, and deployment cutover sign-off remain pending. Updated 17 October 2026.
+Status: Phases 0–4 and Payment extraction are implemented. Ticketing now issues ticket records from confirmed orders, lists them through the Public API, checks them in by ticket ID, and invalidates them on event cancellation/deletion. QR generation, refunds, and confirmed-order cancellation remain deferred. Analytics is still scaffold-only. Updated 17 October 2026.
 
-Ticketing and Analytics are scaffold-only workspaces on ports 4007 and 4008.
-They expose health and generic HTTP metrics, but do not yet issue QR tickets,
-ingest sales, own data, or participate in business flows. The four-service
-ownership plan below excludes them until their behavior, contracts, and data
-ownership are planned separately.
+The earlier extraction plan below records the Order, Event, Email, and Payment
+boundaries. Ticketing is a separate later capability with its own ownership,
+contracts, and schema. Analytics remains a health/metrics skeleton on port 4008.
 
 ## 1. Outcome and decisions
 
@@ -20,13 +18,14 @@ Target responsibilities:
 | Event service | Event catalog, ticket capacity, holds/reservations, availability, event search/indexing | Orders, payment attempts, message delivery |
 | Email service | Confirmation email template, provider adapter, delivery attempts/status, email job queue | Changing orders or Event capacity |
 | Payment service | Payment records, idempotent charge/cancel operations, provider adapter | Order state, inventory, customer identity |
+| Ticketing service | Issued ticket records, ticket status, check-in | Payment outcome, inventory availability, refunds |
 | Public API | Identity/auth, event discovery chat, public façade | Tables moved to extracted services |
 
 **Notification scope:** This migration has one transactional channel: the order-confirmation email. Order creates the `email.send.v1` command and Email owns the template, provider interaction, delivery retries, and status. Do not introduce a Notification service unless the product later needs multiple channels, user preferences, quiet hours, centralized notification rules, or independent notification ownership.
 
 **Payment scope:** Payment owns the `payment_service.payments` table and the provider adapter. Order remains the checkout coordinator and calls Payment over an authenticated private API using the stable Order ID as the idempotency key. Order stores only a payment ID/status projection. The current provider is still a mock; real charges require provider-side idempotency, webhook verification, reconciliation, refunds, and a late-success path before production use.
 
-**Messaging choice:** RabbitMQ is the only broker in this migration. It carries the actionable `email.send.v1` job, with acknowledgement, retry, and dead-letter handling. PostgreSQL remains the source of truth for orders and inventory; the transactional outbox closes the database-to-broker dual-write gap. Do not add Kafka merely because the system has multiple services. Reconsider a retained event stream only when independently evolving consumers need self-service replay that cannot be met by an audited Order-data export or replay procedure. See [RabbitMQ reliability guidance](https://www.rabbitmq.com/docs/reliability).
+**Messaging choice:** RabbitMQ carries the actionable `email.send.v1` job and the `order.confirmed.v1` and event cancellation facts consumed by Ticketing, each with acknowledgement, retry, and dead-letter handling. PostgreSQL remains the source of truth for orders and inventory; transactional outboxes close the database-to-broker dual-write gaps. Do not add Kafka merely because the system has multiple services. See [RabbitMQ reliability guidance](https://www.rabbitmq.com/docs/reliability).
 
 ## 2. Current implementation and the seams to cut
 

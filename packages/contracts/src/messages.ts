@@ -37,6 +37,53 @@ export const OrderConfirmedV1Schema = z.object({
   data: OrderConfirmedDataSchema,
 });
 
+/** Minimal projection of order.confirmed for Ticketing; customer email and payment amounts stay in Order/Email. */
+export const TicketingOrderConfirmedV1Schema = z.object({
+  eventId: z.uuid(),
+  eventType: z.literal("order.confirmed"),
+  schemaVersion: z.literal(1),
+  aggregateId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  correlationId: z.uuid(),
+  data: z.object({
+    orderId: z.uuid(),
+    customer: z.object({ name: z.string().min(1) }),
+    event: z.object({
+      id: z.uuid(),
+      name: z.string().min(1),
+      location: z.string().min(1),
+      startsAt: z.iso.datetime(),
+    }),
+    quantity: z.number().int().positive(),
+  }),
+}).superRefine((message, context) => {
+  if (message.aggregateId !== message.data.orderId) {
+    context.addIssue({ code: "custom", path: ["aggregateId"], message: "Order ID must match the aggregate ID" });
+  }
+});
+
+export const EventTicketInvalidationV1Schema = z.object({
+  eventId: z.uuid(),
+  eventType: z.enum(["event.cancelled", "event.deleted"]),
+  schemaVersion: z.literal(1),
+  aggregateId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  correlationId: z.uuid(),
+  data: z.object({
+    eventId: z.uuid(),
+    version: z.number().int().positive(),
+  }),
+}).superRefine((message, context) => {
+  if (message.data.eventId !== message.aggregateId) {
+    context.addIssue({ code: "custom", path: ["aggregateId"], message: "Event IDs must match the aggregate ID" });
+  }
+});
+
+export const TicketingEventV1Schema = z.union([
+  TicketingOrderConfirmedV1Schema,
+  EventTicketInvalidationV1Schema,
+]);
+
 /** Accepts messages already persisted in RabbitMQ before the v1 cutover. */
 export const LegacyOrderConfirmedMessageSchema = z.object({
   eventId: z.uuid(),
@@ -78,9 +125,13 @@ export const EmailSendV1Schema = z.object({
     quantity: z.number().int().positive(),
     totalAmountCents: z.number().int().nonnegative(),
     currencyCode: z.string().regex(/^[A-Z]{3}$/),
+    ticketsUrl: z.url().optional(),
   }),
 });
 
 export type OrderConfirmedData = z.infer<typeof OrderConfirmedDataSchema>;
 export type OrderConfirmedV1 = z.infer<typeof OrderConfirmedV1Schema>;
+export type TicketingOrderConfirmedV1 = z.infer<typeof TicketingOrderConfirmedV1Schema>;
+export type EventTicketInvalidationV1 = z.infer<typeof EventTicketInvalidationV1Schema>;
+export type TicketingEventV1 = z.infer<typeof TicketingEventV1Schema>;
 export type EmailSendV1 = z.infer<typeof EmailSendV1Schema>;

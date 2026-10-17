@@ -352,6 +352,9 @@ importers:
       '@ticket-live/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
+      amqplib:
+        specifier: ^2.2.0
+        version: 2.2.0
       drizzle-orm:
         specifier: 1.0.0-rc.4
         version: 1.0.0-rc.4(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(pg@8.23.0)(zod@4.6.5)
@@ -466,12 +469,24 @@ importers:
 
   apps/ticketing-service:
     dependencies:
+      '@ticket-live/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@ticket-live/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
+      amqplib:
+        specifier: ^2.2.0
+        version: 2.2.0
+      drizzle-orm:
+        specifier: 1.0.0-rc.4
+        version: 1.0.0-rc.4(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(pg@8.23.0)(zod@4.6.5)
       express:
         specifier: ^5.2.1
         version: 5.2.1(supports-color@5.5.0)
+      pg:
+        specifier: ^8.23.0
+        version: 8.23.0
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
@@ -484,6 +499,9 @@ importers:
 
   packages/runtime:
     dependencies:
+      amqplib:
+        specifier: ^2.2.0
+        version: 2.2.0
       dotenv:
         specifier: ^18.0.2
         version: 18.0.2

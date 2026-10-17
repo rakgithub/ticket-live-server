@@ -14,6 +14,8 @@ import { reconcileCheckoutState } from "../services/orders/checkoutService.ts";
 import { releaseInventoryHoldCommand } from "../services/orders/releaseInventoryHold.ts";
 import { reconcileOrderInventory } from "../services/orders/reconcileInventory.ts";
 import { buildOrderConfirmationEmailCommand } from "../messaging/orderConfirmation.ts";
+import { buildOrderConfirmedTicketingEvent } from "../messaging/orderConfirmation.ts";
+import { publishTicketingEvent } from "../messaging/publishTicketingEvent.ts";
 
 const batchSize = 25;
 const logger = createLogger("ticket-live-outbox-worker");
@@ -39,6 +41,7 @@ async function processOutboxEvent(event: {
   const payload = { ...event.payload };
   if (event.eventType === "order.confirmed") {
     await publishEmailSendCommand(buildOrderConfirmationEmailCommand(event));
+    await publishTicketingEvent(buildOrderConfirmedTicketingEvent(event));
     return;
   }
 

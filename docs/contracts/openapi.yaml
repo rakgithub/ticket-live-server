@@ -34,10 +34,10 @@ paths:
       operationId: healthReadiness
       security: []
       summary: Check API database and service dependencies
-      description: The public API checks PostgreSQL, Event, and Order readiness endpoints.
+      description: The public API checks PostgreSQL, Event, Order, and Ticketing readiness endpoints.
       responses:
         '200':
-          description: PostgreSQL, Event, and Order services are available.
+          description: PostgreSQL, Event, Order, and Ticketing services are available.
           content:
             application/json:
               schema:
@@ -205,6 +205,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HttpError'
+  /tickets:
+    get:
+      operationId: listTickets
+      summary: List tickets for the authenticated user's confirmed orders
+      description: The Public API verifies order ownership with Order before fetching matching ticket records from Ticketing. Ticket records do not include QR tokens or QR image data.
+      responses:
+        '200':
+          description: Tickets owned by the authenticated user, oldest first.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TicketListResponse' }
+        '401':
+          description: Missing or invalid access token.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+        '503':
+          description: Order or Ticketing service is unavailable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
   /internal/orders/checkout:
     servers:
       - url: http://localhost:4005
@@ -298,6 +319,50 @@ paths:
         '400': { description: Invalid payment request. }
         '401': { description: Missing or invalid service credentials. }
         '409': { description: Order already has a payment with different amount details. }
+  /internal/tickets/query:
+    servers:
+      - url: http://localhost:4007
+    post:
+      operationId: ticketingServiceListTickets
+      security: [{ serviceBearerAuth: [] }]
+      summary: List tickets for order IDs verified by the Public API
+      description: Private Public API-to-Ticketing route. The Public API must supply only order IDs returned for its authenticated actor by Order.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InternalTicketQueryRequest' }
+      responses:
+        '200':
+          description: Tickets for the supplied orders.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TicketListResponse' }
+        '400': { description: Invalid order ID list. }
+        '401': { description: Missing or invalid service credentials. }
+  /internal/tickets/check-in:
+    servers:
+      - url: http://localhost:4007
+    post:
+      operationId: ticketingServiceCheckIn
+      security: [{ serviceBearerAuth: [] }]
+      summary: Mark an active ticket as used
+      description: Private scanner route authenticated with the dedicated TICKETING_CHECK_IN_TOKEN. It accepts a ticket ID and event ID; repeated check-in returns 409.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TicketCheckInRequest' }
+      responses:
+        '200':
+          description: Ticket was checked in.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TicketCheckInResponse' }
+        '400': { description: Invalid check-in request. }
+        '401': { description: Missing or invalid service credentials. }
+        '404': { description: Ticket not found for the supplied event. }
+        '409': { description: Ticket has already been checked in or is invalid. }
   /internal/payments/{orderId}:
     servers:
       - url: http://localhost:4006
@@ -881,6 +946,50 @@ components:
           type: [string, 'null']
           enum: [pending, succeeded, failed, cancelled, refunded, null]
         createdAt: { type: string, format: date-time }
+    TicketStatus:
+      type: string
+      enum: [active, used, cancelled, refunded]
+    Ticket:
+      type: object
+      required: [id, orderId, eventId, ticketNumber, holderName, eventName, eventLocation, eventStartsAt, status, issuedAt, checkInAt]
+      properties:
+        id: { type: string, format: uuid }
+        orderId: { type: string, format: uuid }
+        eventId: { type: string, format: uuid }
+        ticketNumber: { type: integer, minimum: 1 }
+        holderName: { type: string }
+        eventName: { type: string }
+        eventLocation: { type: string }
+        eventStartsAt: { type: string, format: date-time }
+        status: { $ref: '#/components/schemas/TicketStatus' }
+        issuedAt: { type: string, format: date-time }
+        checkInAt: { type: [string, 'null'], format: date-time }
+    TicketListResponse:
+      type: object
+      required: [tickets]
+      properties:
+        tickets:
+          type: array
+          items: { $ref: '#/components/schemas/Ticket' }
+    InternalTicketQueryRequest:
+      type: object
+      required: [orderIds]
+      properties:
+        orderIds:
+          type: array
+          maxItems: 500
+          items: { type: string, format: uuid }
+    TicketCheckInRequest:
+      type: object
+      required: [ticketId, eventId]
+      properties:
+        ticketId: { type: string, format: uuid }
+        eventId: { type: string, format: uuid }
+    TicketCheckInResponse:
+      type: object
+      required: [ticket]
+      properties:
+        ticket: { $ref: '#/components/schemas/Ticket' }
     InternalCheckoutRequest:
       type: object
       required: [eventId, quantity, customer]
@@ -1073,11 +1182,12 @@ components:
         status: { type: string, enum: [ready, not_ready] }
         checks:
           type: object
-          required: [postgres, eventService, orderService]
+          required: [postgres, eventService, orderService, ticketingService]
           properties:
             postgres: { type: boolean }
             eventService: { type: boolean }
             orderService: { type: boolean }
+            ticketingService: { type: boolean }
     EmailDeliveryStatus:
       type: string
       enum: [queued, sending, accepted_by_provider, delivered, bounced, failed, simulated]

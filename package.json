@@ -21,7 +21,9 @@
     "start:event-service": "pnpm --filter @ticket-live/event-service start",
     "event:rebuild-index": "pnpm --filter @ticket-live/event-service rebuild-index",
     "db:clear": "node --import tsx/esm scripts/clearDatabase.ts",
-    "replay:order-confirmation": "pnpm --filter @ticket-live/order-service replay-confirmation"
+    "replay:order-confirmation": "pnpm --filter @ticket-live/order-service replay-confirmation",
+    "replay:ticketing-orders": "pnpm --filter @ticket-live/order-service replay-tickets",
+    "replay:ticketing-cancellations": "pnpm --filter @ticket-live/event-service replay-ticket-invalidations"
   },
   "keywords": [],
   "author": "",

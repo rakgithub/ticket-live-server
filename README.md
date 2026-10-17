@@ -4,9 +4,10 @@ Ticket Live is a Node.js API for an event ticket booking app. Users can register
 and sign in, create and search events, and check out tickets. Event owns the
 catalog and inventory in PostgreSQL, Order owns orders, Payment owns payment
 records and the provider boundary, and Event uses Elasticsearch for search.
-Checkout uses a mock payment provider. After an order is confirmed, a background
-worker publishes a message through RabbitMQ; the email worker currently records
-a simulated confirmation delivery.
+Checkout uses a mock payment provider. After an order is confirmed, the Order
+outbox publishes to Email and Ticketing through RabbitMQ. Email currently
+records simulated confirmation delivery, while Ticketing creates one ticket
+record per item.
 
 ## Local services
 
@@ -40,6 +41,8 @@ Git; keep your local secrets there and never commit it.
    also need the same `ORDER_EVENT_TOKEN` for inventory requests. These are
    separate credentials: setting one does not configure the other. The other
    service relationships use their matching token settings in `.env` as well.
+   Public API and Ticketing share `PUBLIC_API_TICKETING_TOKEN`; scanner clients
+   use the separate `TICKETING_CHECK_IN_TOKEN`.
    Order and Payment share `ORDER_PAYMENT_TOKEN` for the private payment API.
 
 2. Start the infrastructure services:
@@ -61,9 +64,9 @@ Git; keep your local secrets there and never commit it.
    ```
 
    The repeatable PostgreSQL bootstrap grants the public API access to identity
-   records and revokes its former access to `order_service`. Order, Event, and
-   Email get separate database logins. The RabbitMQ bootstrap creates separate
-   local Order and Email principals; production credentials and ACLs are
+   records and revokes its former access to `order_service`. Each service gets
+   its own database login. The RabbitMQ bootstrap creates separate local Order,
+   Event, Email, and Ticketing principals; production credentials and ACLs are
    managed outside Compose.
 
 4. Apply the checked-in Drizzle migrations before starting the applications:
@@ -86,8 +89,11 @@ Git; keep your local secrets there and never commit it.
 
    The public API listens at `http://localhost:4002`, Event at `:4003`, Email
    at `:4004`, Order at `:4005`, Payment at `:4006`, Ticketing at `:4007`, and
-   Analytics at `:4008`. Ticketing and Analytics are service skeletons with health
-   and metrics endpoints; QR ticket creation and sales analytics are not implemented yet.
+   Analytics at `:4008`. Ticketing issues one ticket record per confirmed order
+   item, exposes authenticated
+   `GET /tickets`, and supports internal check-in by ticket ID. QR tokens and QR
+   images are intentionally excluded. Analytics remains a health/metrics
+   skeleton.
    The API checks user identity and passes a
    minimized customer snapshot to Order over the private service interface.
    Order owns checkout orchestration, order state, reconciliation, and its
@@ -118,15 +124,23 @@ pnpm start:analytics-service
 pnpm start
 ```
 
-These commands load the root `.env`. Start Event and Payment before Order, and
-start Order and Event before the Public API; Email is needed for confirmation delivery. Order runs its outbox worker
-with the service. Event and Email also run their background work as part of
-their service processes. The host ports are `4002` (Public API), `4003`
+These commands load the root `.env`. Start Ticketing before Event and Order;
+start Event and Payment before Order, then start Order and Event before the
+Public API. Email is needed for confirmation delivery. Order, Event, and
+Ticketing run their background work with the service process. The host ports are `4002` (Public API), `4003`
 (Event), `4004` (Email), `4005` (Order), `4006` (Payment), `4007` (Ticketing),
 and `4008` (Analytics). For example, request the public
 event catalog at `http://localhost:4002/events`; the Public API forwards that
 request to Event over its internal authenticated endpoint. Check readiness at
 `/health/ready` on each service port.
+
+The authenticated `GET http://localhost:4002/tickets` endpoint returns ticket
+records for the signed-in user's confirmed orders. The internal
+`POST http://localhost:4007/internal/tickets/check-in` endpoint accepts
+`ticketId` and `eventId` and requires `TICKETING_CHECK_IN_TOKEN`. Set
+`TICKETS_PORTAL_URL` to the frontend's My Tickets route for the optional link in
+confirmation email data. The local email provider only records simulated
+delivery; it does not send the message.
 
 If the database reports missing tables, run the migrations in step 4 before
 starting the services. If an internal call reports that authentication is not
@@ -226,6 +240,17 @@ The Event service processes `event_service.outbox_events`; the Order service
 processes `order_service.outbox_events`. Each marks a row processed after its
 destination accepts the event. Failed rows retain attempt counts and retry with
 capped exponential backoff and jitter.
+
+Order sends `order.confirmed.v1` to Ticketing as well as the email command.
+Ticketing creates one record per quantity, with a stable order/ticket-number
+uniqueness constraint for retries. Event sends `event.cancelled` and
+`event.deleted` to Ticketing, which marks active tickets invalid and remembers
+cancelled event IDs so late order messages cannot issue active tickets.
+Refund and confirmed-order cancellation events are not available yet and are
+deferred. To populate existing confirmed orders after rollout, first inspect
+the replay with `pnpm replay:ticketing-orders`, then apply with
+`pnpm replay:ticketing-orders -- --apply`. Existing Event cancellations can be
+replayed similarly with `pnpm replay:ticketing-cancellations -- --apply`.
 
 Checkout now requires an `Idempotency-Key` header. If a client retries the
 same checkout body with the same key after the first request finishes, the API

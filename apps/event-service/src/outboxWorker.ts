@@ -4,6 +4,7 @@ import { outboxEventsTable } from "./db/schema/outboxEvents.ts";
 import { ensureEventsIndex, eventsIndexName } from "./search/eventsIndex.ts";
 import { elasticsearch } from "./search/client.ts";
 import { createLogger } from "@ticket-live/runtime";
+import { buildEventTicketInvalidation, eventTicketInvalidationTraceHeaders, publishEventTicketInvalidation } from "./messaging/publishTicketingEvent.ts";
 
 const logger = createLogger("ticket-live-event-outbox-worker");
 let isProcessing = false;
@@ -30,6 +31,9 @@ export async function processEventOutboxBatch(): Promise<number> {
         version,
         version_type: "external_gte",
       });
+      if (row.eventType === "event.cancelled" || row.eventType === "event.deleted") {
+        await publishEventTicketInvalidation(buildEventTicketInvalidation(row), eventTicketInvalidationTraceHeaders(row.payload));
+      }
       await db.update(outboxEventsTable).set({ processedAt: new Date(), lastError: null }).where(eq(outboxEventsTable.id, row.id));
     } catch (error) {
       const attempts = row.attempts + 1;

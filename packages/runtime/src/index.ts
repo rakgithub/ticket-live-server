@@ -6,3 +6,4 @@ export * from "./observability/metrics.ts";
 export * from "./observability/otlpMetricsExporter.ts";
 export * from "./observability/traceContext.ts";
 export * from "./observability/traceExporter.ts";
+export * from "./messaging/publishConfirmedMessage.ts";

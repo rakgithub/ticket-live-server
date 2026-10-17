@@ -135,6 +135,37 @@ export const OrderListResponseSchema = z.object({
   orders: z.array(OrderSummarySchema),
 });
 
+export const TicketStatusSchema = z.enum(["active", "used", "cancelled", "refunded"]);
+
+export const TicketSchema = z.object({
+  id: z.uuid(),
+  orderId: z.uuid(),
+  eventId: z.uuid(),
+  ticketNumber: z.number().int().positive(),
+  holderName: z.string().min(1),
+  eventName: z.string().min(1),
+  eventLocation: z.string(),
+  eventStartsAt: z.iso.datetime(),
+  status: TicketStatusSchema,
+  issuedAt: z.iso.datetime(),
+  checkInAt: z.iso.datetime().nullable(),
+});
+
+export const TicketListResponseSchema = z.object({ tickets: z.array(TicketSchema) });
+
+export const InternalTicketQueryRequestSchema = z.object({
+  orderIds: z.array(z.uuid()).max(500),
+}).strict();
+
+export const TicketCheckInRequestSchema = z.object({
+  ticketId: z.uuid(),
+  eventId: z.uuid(),
+}).strict();
+
+export const TicketCheckInResponseSchema = z.object({
+  ticket: TicketSchema,
+});
+
 export const HttpErrorSchema = z.object({ error: z.string().min(1) });
 
 export const EventSchema = z.object({
@@ -225,6 +256,11 @@ export type InternalPaymentChargeRequest = z.infer<typeof InternalPaymentChargeR
 export type InternalPaymentRecord = z.infer<typeof InternalPaymentRecordSchema>;
 export type OrderSummary = z.infer<typeof OrderSummarySchema>;
 export type OrderListResponse = z.infer<typeof OrderListResponseSchema>;
+export type Ticket = z.infer<typeof TicketSchema>;
+export type TicketListResponse = z.infer<typeof TicketListResponseSchema>;
+export type InternalTicketQueryRequest = z.infer<typeof InternalTicketQueryRequestSchema>;
+export type TicketCheckInRequest = z.infer<typeof TicketCheckInRequestSchema>;
+export type TicketCheckInResponse = z.infer<typeof TicketCheckInResponseSchema>;
 export type InventoryHoldCreateRequest = z.infer<typeof InventoryHoldCreateRequestSchema>;
 export type InventoryHoldIdempotencyKey = z.infer<typeof InventoryHoldIdempotencyKeySchema>;
 export type InventoryHoldState = z.infer<typeof InventoryHoldStateSchema>;

@@ -1,8 +1,11 @@
 import {
   EmailSendV1Schema,
   OrderConfirmedDataSchema,
+  TicketingOrderConfirmedV1Schema,
+  type TicketingOrderConfirmedV1,
   type EmailSendV1,
 } from "@ticket-live/contracts";
+import { env } from "@ticket-live/runtime";
 
 export type OrderConfirmedOutboxEvent = {
   id: string;
@@ -37,6 +40,39 @@ export function buildOrderConfirmationEmailCommand(
       quantity: order.quantity,
       totalAmountCents: order.totalAmountCents,
       currencyCode: order.currencyCode,
+      ticketsUrl: env.TICKETS_PORTAL_URL,
+    },
+  });
+}
+
+/** Builds Ticketing's versioned domain fact from the immutable Order outbox row. */
+export function buildOrderConfirmedTicketingEvent(
+  event: OrderConfirmedOutboxEvent & { createdAt: Date },
+): TicketingOrderConfirmedV1 {
+  const payload = { ...event.payload };
+  const telemetry = payload.__telemetry;
+  delete payload.__telemetry;
+  const order = OrderConfirmedDataSchema.parse(payload);
+  if (order.orderId !== event.aggregateId) {
+    throw new Error("Order confirmation payload does not match its outbox aggregate ID");
+  }
+  const correlationId = typeof telemetry === "object" && telemetry !== null &&
+    typeof (telemetry as Record<string, unknown>).correlationId === "string"
+    ? (telemetry as Record<string, unknown>).correlationId as string
+    : event.id;
+
+  return TicketingOrderConfirmedV1Schema.parse({
+    eventId: event.id,
+    eventType: "order.confirmed",
+    schemaVersion: 1,
+    aggregateId: event.aggregateId,
+    occurredAt: event.createdAt.toISOString(),
+    correlationId,
+    data: {
+      orderId: order.orderId,
+      customer: { name: order.customer.name },
+      event: order.event,
+      quantity: order.quantity,
     },
   });
 }

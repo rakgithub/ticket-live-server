@@ -19,6 +19,7 @@ const envSchema = z.object({
   EVENT_SERVICE_DATABASE_URL: z.string().min(1).optional(),
   EMAIL_SERVICE_DATABASE_URL: z.string().min(1).optional(),
   PAYMENT_SERVICE_DATABASE_URL: z.string().min(1).optional(),
+  TICKETING_SERVICE_DATABASE_URL: z.string().min(1).optional(),
   ELASTICSEARCH_URL: z.url("ELASTICSEARCH_URL must be a valid URL").default("http://localhost:9200"),
   GEMINI_API_KEY: z
     .string()
@@ -31,7 +32,9 @@ const envSchema = z.object({
   // one broker principal per service.
   AMQP_URL: z.string().default(""),
   ORDER_AMQP_URL: z.string().default(""),
+  EVENT_AMQP_URL: z.string().default(""),
   EMAIL_AMQP_URL: z.string().default(""),
+  TICKETING_AMQP_URL: z.string().default(""),
   RABBITMQ_AUTO_DECLARE_TOPOLOGY: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
   OTEL_EXPORTER_OTLP_ENDPOINT: z
     .string()
@@ -48,6 +51,8 @@ const envSchema = z.object({
   INVENTORY_RECONCILIATION_INTERVAL_MS: z.coerce.number().int().min(1_000).default(60_000),
   EMAIL_RETRY_DELAY_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(30_000),
   EMAIL_MAX_RETRIES: z.coerce.number().int().min(0).max(20).default(5),
+  TICKETING_RETRY_DELAY_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(30_000),
+  TICKETING_MAX_RETRIES: z.coerce.number().int().min(0).max(20).default(5),
   EMAIL_LEGACY_QUEUE_ENABLED: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
   EMAIL_PROVIDER: z.enum(["fake"]).default("fake"),
   JWT_SECRET: z.string().default(""),
@@ -62,6 +67,8 @@ const envSchema = z.object({
   PUBLIC_API_EVENT_TOKEN: z.string().regex(/^[\x21-\x7E]{32,}$/).optional(),
   ORDER_EVENT_TOKEN: z.string().regex(/^[\x21-\x7E]{32,}$/).optional(),
   EMAIL_INTERNAL_TOKEN: z.string().regex(/^[\x21-\x7E]{32,}$/).optional(),
+  PUBLIC_API_TICKETING_TOKEN: z.string().regex(/^[\x21-\x7E]{32,}$/).optional(),
+  TICKETING_CHECK_IN_TOKEN: z.string().regex(/^[\x21-\x7E]{32,}$/).optional(),
   ORDER_PAYMENT_TOKEN: z.string().regex(/^[\x21-\x7E]{32,}$/).optional(),
   ORDER_SERVICE_URL: z.url().default("http://localhost:4005"),
   ORDER_SERVICE_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(45_000),
@@ -69,6 +76,9 @@ const envSchema = z.object({
   PAYMENT_SERVICE_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(45_000),
   INVENTORY_SERVICE_URL: z.url().default("http://localhost:4003"),
   EVENT_SERVICE_URL: z.url().default("http://localhost:4003"),
+  TICKETING_SERVICE_URL: z.url().default("http://localhost:4007"),
+  TICKETING_SERVICE_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(45_000),
+  TICKETS_PORTAL_URL: z.url().default("http://localhost:3000/my-tickets"),
   ACCESS_TOKEN_TTL: z
     .string()
     .regex(/^\d+[smhd]$/, "ACCESS_TOKEN_TTL must look like 15m, 1h, or 1d")
@@ -109,6 +119,9 @@ const envSchema = z.object({
   if (values.TICKETLIVE_SERVICE === "payment" && !values.PAYMENT_SERVICE_DATABASE_URL) {
     context.addIssue({ code: "custom", path: ["PAYMENT_SERVICE_DATABASE_URL"], message: "PAYMENT_SERVICE_DATABASE_URL is required for the Payment service" });
   }
+  if (values.TICKETLIVE_SERVICE === "ticketing" && !values.TICKETING_SERVICE_DATABASE_URL) {
+    context.addIssue({ code: "custom", path: ["TICKETING_SERVICE_DATABASE_URL"], message: "TICKETING_SERVICE_DATABASE_URL is required for the Ticketing service" });
+  }
   if (values.TICKETLIVE_SERVICE === "public-api" && !values.DATABASE_URL) {
     context.addIssue({ code: "custom", path: ["DATABASE_URL"], message: "DATABASE_URL is required for the public API" });
   }
@@ -120,6 +133,12 @@ const envSchema = z.object({
   }
   if (values.TICKETLIVE_SERVICE === "order" && !values.ORDER_AMQP_URL && !values.AMQP_URL) {
     context.addIssue({ code: "custom", path: ["ORDER_AMQP_URL"], message: "ORDER_AMQP_URL is required for the Order service" });
+  }
+  if (values.TICKETLIVE_SERVICE === "event" && !values.EVENT_AMQP_URL && !values.AMQP_URL) {
+    context.addIssue({ code: "custom", path: ["EVENT_AMQP_URL"], message: "EVENT_AMQP_URL is required for the Event service" });
+  }
+  if (values.TICKETLIVE_SERVICE === "ticketing" && !values.TICKETING_AMQP_URL && !values.AMQP_URL) {
+    context.addIssue({ code: "custom", path: ["TICKETING_AMQP_URL"], message: "TICKETING_AMQP_URL is required for the Ticketing service" });
   }
   if (values.NODE_ENV === "production" && values.TICKETLIVE_SERVICE === "email") {
     context.addIssue({
@@ -137,15 +156,17 @@ const envSchema = z.object({
   }
   if (values.NODE_ENV === "production") {
     const dedicatedTokens: Array<[string, string | undefined]> = values.TICKETLIVE_SERVICE === "public-api"
-      ? [["PUBLIC_API_ORDER_TOKEN", values.PUBLIC_API_ORDER_TOKEN], ["PUBLIC_API_EVENT_TOKEN", values.PUBLIC_API_EVENT_TOKEN]]
+      ? [["PUBLIC_API_ORDER_TOKEN", values.PUBLIC_API_ORDER_TOKEN], ["PUBLIC_API_EVENT_TOKEN", values.PUBLIC_API_EVENT_TOKEN], ["PUBLIC_API_TICKETING_TOKEN", values.PUBLIC_API_TICKETING_TOKEN]]
       : values.TICKETLIVE_SERVICE === "order"
         ? [["PUBLIC_API_ORDER_TOKEN", values.PUBLIC_API_ORDER_TOKEN], ["ORDER_EVENT_TOKEN", values.ORDER_EVENT_TOKEN], ["ORDER_PAYMENT_TOKEN", values.ORDER_PAYMENT_TOKEN]]
       : values.TICKETLIVE_SERVICE === "event"
         ? [["PUBLIC_API_EVENT_TOKEN", values.PUBLIC_API_EVENT_TOKEN], ["ORDER_EVENT_TOKEN", values.ORDER_EVENT_TOKEN]]
         : values.TICKETLIVE_SERVICE === "payment"
           ? [["ORDER_PAYMENT_TOKEN", values.ORDER_PAYMENT_TOKEN]]
-        : values.TICKETLIVE_SERVICE === "email"
-          ? [["EMAIL_INTERNAL_TOKEN", values.EMAIL_INTERNAL_TOKEN]]
+      : values.TICKETLIVE_SERVICE === "email"
+        ? [["EMAIL_INTERNAL_TOKEN", values.EMAIL_INTERNAL_TOKEN]]
+        : values.TICKETLIVE_SERVICE === "ticketing"
+          ? [["PUBLIC_API_TICKETING_TOKEN", values.PUBLIC_API_TICKETING_TOKEN], ["TICKETING_CHECK_IN_TOKEN", values.TICKETING_CHECK_IN_TOKEN]]
           : [];
     for (const [name, token] of dedicatedTokens) {
       if (!token || /replace-with|change-me|^local-/i.test(token)) {
@@ -155,11 +176,17 @@ const envSchema = z.object({
     if (new Set(dedicatedTokens.map(([, token]) => token)).size !== dedicatedTokens.length) {
       context.addIssue({ code: "custom", path: ["PUBLIC_API_EVENT_TOKEN"], message: "Each service relationship must use a different production credential" });
     }
-    if ((values.TICKETLIVE_SERVICE === "order" || values.TICKETLIVE_SERVICE === "email") && values.RABBITMQ_AUTO_DECLARE_TOPOLOGY) {
+    if ((values.TICKETLIVE_SERVICE === "order" || values.TICKETLIVE_SERVICE === "event" || values.TICKETLIVE_SERVICE === "email" || values.TICKETLIVE_SERVICE === "ticketing") && values.RABBITMQ_AUTO_DECLARE_TOPOLOGY) {
       context.addIssue({ code: "custom", path: ["RABBITMQ_AUTO_DECLARE_TOPOLOGY"], message: "Production services must use pre-provisioned RabbitMQ topology" });
     }
     if (values.TICKETLIVE_SERVICE === "order" && !values.ORDER_AMQP_URL) {
       context.addIssue({ code: "custom", path: ["ORDER_AMQP_URL"], message: "ORDER_AMQP_URL must be configured in production" });
+    }
+    if (values.TICKETLIVE_SERVICE === "event" && !values.EVENT_AMQP_URL) {
+      context.addIssue({ code: "custom", path: ["EVENT_AMQP_URL"], message: "EVENT_AMQP_URL must be configured in production" });
+    }
+    if (values.TICKETLIVE_SERVICE === "ticketing" && !values.TICKETING_AMQP_URL) {
+      context.addIssue({ code: "custom", path: ["TICKETING_AMQP_URL"], message: "TICKETING_AMQP_URL must be configured in production" });
     }
     if (values.TICKETLIVE_SERVICE === "email" && !values.EMAIL_AMQP_URL) {
       context.addIssue({ code: "custom", path: ["EMAIL_AMQP_URL"], message: "EMAIL_AMQP_URL must be configured in production" });
@@ -171,13 +198,15 @@ const envSchema = z.object({
         context.addIssue({ code: "custom", path: [name], message: `${name} must use ${protocol} in production` });
       }
     };
-    if (values.TICKETLIVE_SERVICE !== "ticketing" && values.TICKETLIVE_SERVICE !== "analytics") {
+    if (values.TICKETLIVE_SERVICE !== "analytics") {
       const databaseSetting = values.TICKETLIVE_SERVICE === "public-api"
         ? "DATABASE_URL"
         : values.TICKETLIVE_SERVICE === "order"
           ? "ORDER_SERVICE_DATABASE_URL"
         : values.TICKETLIVE_SERVICE === "payment"
           ? "PAYMENT_SERVICE_DATABASE_URL"
+          : values.TICKETLIVE_SERVICE === "ticketing"
+            ? "TICKETING_SERVICE_DATABASE_URL"
           : values.TICKETLIVE_SERVICE === "event"
             ? "EVENT_SERVICE_DATABASE_URL"
             : "EMAIL_SERVICE_DATABASE_URL";
@@ -187,7 +216,9 @@ const envSchema = z.object({
           ? values.ORDER_SERVICE_DATABASE_URL
         : values.TICKETLIVE_SERVICE === "payment"
           ? values.PAYMENT_SERVICE_DATABASE_URL
-          : values.TICKETLIVE_SERVICE === "event"
+        : values.TICKETLIVE_SERVICE === "ticketing"
+          ? values.TICKETING_SERVICE_DATABASE_URL
+        : values.TICKETLIVE_SERVICE === "event"
             ? values.EVENT_SERVICE_DATABASE_URL
             : values.EMAIL_SERVICE_DATABASE_URL;
       let databaseSslMode = "";
@@ -199,6 +230,7 @@ const envSchema = z.object({
     if (values.TICKETLIVE_SERVICE === "public-api") {
       requireTls(values.EVENT_SERVICE_URL, "EVENT_SERVICE_URL", "https:");
       requireTls(values.ORDER_SERVICE_URL, "ORDER_SERVICE_URL", "https:");
+      requireTls(values.TICKETING_SERVICE_URL, "TICKETING_SERVICE_URL", "https:");
       if (/replace-with|change-me|^local-/i.test(values.JWT_SECRET)) {
         context.addIssue({ code: "custom", path: ["JWT_SECRET"], message: "Replace the example JWT secret in production" });
       }
@@ -207,9 +239,19 @@ const envSchema = z.object({
       requireTls(values.INVENTORY_SERVICE_URL, "INVENTORY_SERVICE_URL", "https:");
       requireTls(values.PAYMENT_SERVICE_URL, "PAYMENT_SERVICE_URL", "https:");
       requireTls(values.ORDER_AMQP_URL, "ORDER_AMQP_URL", "amqps:");
+      if (!process.env.TICKETS_PORTAL_URL) {
+        context.addIssue({ code: "custom", path: ["TICKETS_PORTAL_URL"], message: "TICKETS_PORTAL_URL must be configured in production" });
+      }
+      requireTls(values.TICKETS_PORTAL_URL, "TICKETS_PORTAL_URL", "https:");
+    }
+    if (values.TICKETLIVE_SERVICE === "event") {
+      requireTls(values.EVENT_AMQP_URL, "EVENT_AMQP_URL", "amqps:");
     }
     if (values.TICKETLIVE_SERVICE === "email") {
       requireTls(values.EMAIL_AMQP_URL, "EMAIL_AMQP_URL", "amqps:");
+    }
+    if (values.TICKETLIVE_SERVICE === "ticketing") {
+      requireTls(values.TICKETING_AMQP_URL, "TICKETING_AMQP_URL", "amqps:");
     }
     if (values.TICKETLIVE_SERVICE === "event") {
       requireTls(values.ELASTICSEARCH_URL, "ELASTICSEARCH_URL", "https:");
@@ -242,7 +284,9 @@ export type InternalCredential =
   | "public-api-event"
   | "order-event"
   | "order-payment"
-  | "email-internal";
+  | "email-internal"
+  | "public-api-ticketing"
+  | "ticketing-check-in";
 
 /** Local fallback is intentionally disabled in production. */
 export function serviceCredential(name: InternalCredential): string | undefined {
@@ -252,12 +296,16 @@ export function serviceCredential(name: InternalCredential): string | undefined 
     "order-event": env.ORDER_EVENT_TOKEN,
     "order-payment": env.ORDER_PAYMENT_TOKEN,
     "email-internal": env.EMAIL_INTERNAL_TOKEN,
+    "public-api-ticketing": env.PUBLIC_API_TICKETING_TOKEN,
+    "ticketing-check-in": env.TICKETING_CHECK_IN_TOKEN,
   }[name];
   return dedicated ?? (env.NODE_ENV === "production" ? undefined : env.INTERNAL_SERVICE_TOKEN);
 }
 
 export const orderAmqpUrl = env.ORDER_AMQP_URL || env.AMQP_URL;
 export const emailAmqpUrl = env.EMAIL_AMQP_URL || env.AMQP_URL;
+export const eventAmqpUrl = env.EVENT_AMQP_URL || env.AMQP_URL;
+export const ticketingAmqpUrl = env.TICKETING_AMQP_URL || env.AMQP_URL;
 
 export const corsOrigins = new Set(
   env.CORS_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean),

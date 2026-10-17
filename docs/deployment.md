@@ -3,8 +3,8 @@
 This repository provides a provider-neutral container image and local Compose
 stack. It does not include cloud-specific infrastructure definitions. Build the
 root Dockerfile once per revision and roll out the same image independently
-with `TICKETLIVE_SERVICE` set to `public-api`, `order`, `event`, `email`, or
-`payment`.
+with `TICKETLIVE_SERVICE` set to `public-api`, `order`, `event`, `email`,
+`payment`, or `ticketing`.
 
 ## Deployment order
 
@@ -18,14 +18,15 @@ with `TICKETLIVE_SERVICE` set to `public-api`, `order`, `event`, `email`, or
    startup commands never apply migrations. Add nullable columns/tables first, deploy compatible readers
    and writers, backfill, then remove old columns only after every old binary is
    drained.
-4. Provision broker topology and service credentials before starting Order or
-   Email. Set `RABBITMQ_AUTO_DECLARE_TOPOLOGY=false` on both production
-   services; they must fail against missing queues instead of creating
+4. Provision broker topology and service credentials before starting Order,
+   Event, Email, or Ticketing. Set `RABBITMQ_AUTO_DECLARE_TOPOLOGY=false` on
+   those production services; they must fail against missing queues instead of creating
    production topology implicitly.
-5. Roll out Event, Email, and Payment, then Order, then the public API gateway. Verify
+5. Roll out Ticketing before Event and Order, then Email and Payment, then the
+   public API gateway. Verify
    each `/health/ready`, `/metrics`, service logs, RabbitMQ consumers, and
    outbox age before sending traffic. The API readiness endpoint checks its
-   identity database and Event and Order readiness.
+   identity database and Event, Order, and Ticketing readiness.
 6. Keep one Order service instance until outbox row claiming is implemented.
    The relay/reconciliation loop is in-process and currently has no cross-replica
    claim lock.
@@ -50,13 +51,14 @@ fallback and is rejected for production.
 
 | Runtime | Database credential | Internal credential | Broker credential |
 | --- | --- | --- | --- |
-| Public API | `DATABASE_URL` with identity/public tables only | `PUBLIC_API_ORDER_TOKEN`, `PUBLIC_API_EVENT_TOKEN` | None |
-| Order | `ORDER_SERVICE_DATABASE_URL` for `order_service` | `ORDER_EVENT_TOKEN`, `ORDER_PAYMENT_TOKEN` | `ORDER_AMQP_URL` user may publish only to `ticket-live.email` |
-| Event | `EVENT_SERVICE_DATABASE_URL` for `event_service` | `PUBLIC_API_EVENT_TOKEN`, `ORDER_EVENT_TOKEN` | None |
+| Public API | `DATABASE_URL` with identity/public tables only | `PUBLIC_API_ORDER_TOKEN`, `PUBLIC_API_EVENT_TOKEN`, `PUBLIC_API_TICKETING_TOKEN` | None |
+| Order | `ORDER_SERVICE_DATABASE_URL` for `order_service` | `ORDER_EVENT_TOKEN`, `ORDER_PAYMENT_TOKEN` | `ORDER_AMQP_URL` user publishes to `ticket-live.email` and `ticket-live.ticketing`; `TICKETS_PORTAL_URL` configures the optional email link |
+| Event | `EVENT_SERVICE_DATABASE_URL` for `event_service` | `PUBLIC_API_EVENT_TOKEN`, `ORDER_EVENT_TOKEN` | `EVENT_AMQP_URL` user publishes to `ticket-live.ticketing` |
 | Email | `EMAIL_SERVICE_DATABASE_URL` for `email_service` | `EMAIL_INTERNAL_TOKEN` | `EMAIL_AMQP_URL` user consumes Email commands and publishes retry/dead-letter messages |
 | Payment | `PAYMENT_SERVICE_DATABASE_URL` for `payment_service` | `ORDER_PAYMENT_TOKEN` | None |
+| Ticketing | `TICKETING_SERVICE_DATABASE_URL` for `ticketing_service` | `PUBLIC_API_TICKETING_TOKEN`, `TICKETING_CHECK_IN_TOKEN` | `TICKETING_AMQP_URL` user consumes events and publishes retry/dead-letter messages |
 
-Set `ORDER_SERVICE_URL`, `EVENT_SERVICE_URL`, and `PAYMENT_SERVICE_URL` to
+Set `ORDER_SERVICE_URL`, `EVENT_SERVICE_URL`, `PAYMENT_SERVICE_URL`, and `TICKETING_SERVICE_URL` to
 private service addresses. Set `INVENTORY_SERVICE_URL` on Order to its private
 Event address as well. Order calls Payment with a stable Order ID and Payment
 owns charge idempotency and provider results. URL
@@ -85,19 +87,21 @@ settings are for local development only.
 
 Import [`../ops/rabbitmq/topology.json`](../ops/rabbitmq/topology.json) with an
 operator credential before deploying services. It provisions the durable
-`ticket-live.email`, retry, and dead-letter exchanges; `email.send.v1`, retry,
-dead-letter, and legacy queues; and their bindings. The retry queue TTL is
-30 seconds to match `EMAIL_RETRY_DELAY_MS`; provision the matching TTL if the
-configured delay changes. Keep `booking-confirmation-email` until Phase 4's
-queue drain is verified.
+Email and Ticketing exchanges, retry and dead-letter queues, the legacy email
+queue, and their bindings. The Ticketing retry queue TTL is 30 seconds to match
+`TICKETING_RETRY_DELAY_MS`; provision the matching TTL if the configured delay
+changes. Keep `booking-confirmation-email` until Phase 4's queue drain is
+verified.
 
-Production broker ACLs should omit configure permission from both runtime
+Production broker ACLs should omit configure permission from runtime
 principals:
 
 | Principal | Configure | Write | Read |
 | --- | --- | --- | --- |
-| Order | none | `^ticket-live\.email$` | none |
+| Order | none | `^(ticket-live\.email|ticket-live\.ticketing)$` | none |
+| Event | none | `^ticket-live\.ticketing$` | none |
 | Email | none | `^ticket-live\.email\.(retry|dead)$` | `^(email\.send\.v1|booking-confirmation-email)$` |
+| Ticketing | none | `^ticket-live\.ticketing\.(retry|dead)$` | `^ticketing\.events\.v1$` |
 
 The local bootstrap script gives the applications enough configure access to
 declare topology for developer convenience. Its local credentials are not a
@@ -116,7 +120,10 @@ collector with `OTEL_EXPORTER_OTLP_ENDPOINT` and secret headers where needed.
 
 For an outage, preserve pending outbox rows and broker messages. Restore the
 affected service or dependency, let bounded retries and reconciliation run,
-then inspect metrics and state before any manual replay. Use the audited
+then inspect metrics and state before any manual replay. The dry-run-first
+`replay:ticketing-orders` and `replay:ticketing-cancellations` commands replay
+durable Order and Event outbox facts directly to Ticketing; Ticketing's unique
+order/ticket-number key makes these replays idempotent. Use the audited
 one-order Email replay procedure in [`phase-4-cutover.md`](phase-4-cutover.md).
 Do not replay an Email command until its provider outcome is known.
 
