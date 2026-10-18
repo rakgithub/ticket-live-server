@@ -6,7 +6,6 @@
 
 - This is a pnpm 11 workspace. Runtime code and service-owned Drizzle models live in `apps/public-api`, `apps/order-service`, `apps/event-service`, and `apps/email-service`. `packages/contracts` holds shared wire contracts; `packages/runtime` holds generic environment, internal-auth, and observability helpers. Do not import another app's implementation or database models.
 - Before editing, check `git status` and nearby code. Preserve existing local changes and follow the conventions of the files you touch.
-- For new implementation, prefer functions over classes. Use a class only when a class-based API or per-instance state is needed.
 
 ## Planning and implementation workflow
 
