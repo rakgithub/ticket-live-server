@@ -1,5 +1,25 @@
 import { z } from "zod";
 
+export const EventGenreSchema = z.enum([
+  "blues",
+  "classical",
+  "country",
+  "electronic",
+  "folk",
+  "funk",
+  "hip-hop",
+  "jazz",
+  "metal",
+  "pop",
+  "punk",
+  "reggae",
+  "rock",
+  "soul",
+]);
+export type EventGenre = z.infer<typeof EventGenreSchema>;
+
+export const EVENT_GENRES = EventGenreSchema.options;
+
 export const CheckoutRequestSchema = z.object({
   eventId: z.uuid(),
   quantity: z.number().int().positive().max(10_000),
@@ -173,6 +193,7 @@ export const EventSchema = z.object({
   name: z.string().min(1),
   description: z.string().min(1),
   location: z.string().min(1),
+  genre: EventGenreSchema.nullable(),
   minPeople: z.number().int().positive(),
   maxPeople: z.number().int().positive(),
   reservedQuantity: z.number().int().nonnegative(),
@@ -206,6 +227,7 @@ export const EventChatCardSchema = z.object({
   name: z.string().min(1),
   descriptionPreview: z.string(),
   location: z.string(),
+  genre: EventGenreSchema.nullable(),
   startsAt: z.iso.datetime(),
   ticketPriceCents: z.number().int().nonnegative(),
   currencyCode: z.string().regex(/^[A-Z]{3}$/),

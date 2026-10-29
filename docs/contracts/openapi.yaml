@@ -48,6 +48,53 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Readiness'
+  /chat/events/stream:
+    post:
+      operationId: streamEventSearch
+      summary: Search events from a natural-language request
+      description: >-
+        Streams status, results, delta, done, or error SSE frames. The done
+        frame's finishReason is completed, empty, unsupported, or clarification.
+        Returned event cards are sourced from Event's catalog and checked against
+        supported genre and location criteria.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventChatRequest'
+      responses:
+        '200':
+          description: Server-sent event stream. A clarification finish returns no event cards.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              examples:
+                clarification:
+                  value: |-
+                    event: done
+                    data: {"requestId":"...","finishReason":"clarification"}
+        '400':
+          description: Invalid chat request.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+        '401':
+          description: Missing or invalid access token.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+        '429':
+          description: Chat rate or concurrent stream limit exceeded.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
+        '503':
+          description: Event chat is not configured.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HttpError' }
   /events:
     get:
       operationId: listEvents
@@ -540,6 +587,7 @@ paths:
                 name: { type: string, minLength: 1, maxLength: 255 }
                 description: { type: string, minLength: 1 }
                 location: { type: string, minLength: 1, maxLength: 255 }
+                genre: { $ref: '#/components/schemas/EventGenre' }
                 minPeople: { type: integer, minimum: 1 }
                 maxPeople: { type: integer, minimum: 1 }
                 ticketPriceCents: { type: integer, minimum: 0 }
@@ -604,6 +652,9 @@ paths:
           name: location
           schema: { type: string, minLength: 1, maxLength: 120 }
         - in: query
+          name: genre
+          schema: { type: string, enum: [blues, classical, country, electronic, folk, funk, hip-hop, jazz, metal, pop, punk, reggae, rock, soul] }
+        - in: query
           name: limit
           schema: { type: integer, minimum: 1, maximum: 50 }
       responses:
@@ -627,6 +678,12 @@ paths:
           required: true
           description: Comma-separated event UUIDs in search rank order.
           schema: { type: string }
+        - in: query
+          name: genre
+          schema: { type: string, enum: [blues, classical, country, electronic, folk, funk, hip-hop, jazz, metal, pop, punk, reggae, rock, soul] }
+        - in: query
+          name: location
+          schema: { type: string, minLength: 1, maxLength: 120 }
         - in: query
           name: limit
           schema: { type: integer, minimum: 1, maximum: 10 }
@@ -1081,12 +1138,13 @@ components:
           $ref: '#/components/schemas/InventoryHold'
     EventSearchResult:
       type: object
-      required: [id, name, description, location, minPeople, maxPeople, reservedQuantity, ticketPriceCents, currencyCode, servesAlcohol, isCancelled, userId, startsAt, createdAt, updatedAt, score]
+      required: [id, name, description, location, genre, minPeople, maxPeople, reservedQuantity, ticketPriceCents, currencyCode, servesAlcohol, isCancelled, userId, startsAt, createdAt, updatedAt, score]
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
         description: { type: string }
         location: { type: string }
+        genre: { $ref: '#/components/schemas/EventGenre' }
         minPeople: { type: integer }
         maxPeople: { type: integer }
         reservedQuantity: { type: integer }
@@ -1115,12 +1173,13 @@ components:
             $ref: '#/components/schemas/EventSearchCandidate'
     EventChatCard:
       type: object
-      required: [id, name, descriptionPreview, location, startsAt, ticketPriceCents, currencyCode, minPeople, maxPeople, servesAlcohol]
+      required: [id, name, descriptionPreview, location, genre, startsAt, ticketPriceCents, currencyCode, minPeople, maxPeople, servesAlcohol]
       properties:
         id: { type: string, format: uuid }
         name: { type: string, minLength: 1 }
         descriptionPreview: { type: string }
         location: { type: string }
+        genre: { $ref: '#/components/schemas/EventGenre' }
         startsAt: { type: string, format: date-time }
         ticketPriceCents: { type: integer, minimum: 0 }
         currencyCode: { type: string, pattern: '^[A-Z]{3}$' }
@@ -1135,14 +1194,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/EventChatCard'
+    EventGenre:
+      type: [string, 'null']
+      enum: [blues, classical, country, electronic, folk, funk, hip-hop, jazz, metal, pop, punk, reggae, rock, soul, null]
+      description: A supported music genre label. Null means the event has not been classified.
+    EventChatRequest:
+      type: object
+      additionalProperties: false
+      required: [message]
+      properties:
+        message: { type: string, minLength: 1, maxLength: 500 }
+        limit: { type: integer, minimum: 1, maximum: 10, default: 5 }
+    EventChatFinishReason:
+      type: string
+      enum: [completed, empty, unsupported, clarification]
     Event:
       type: object
-      required: [id, name, description, location, minPeople, maxPeople, reservedQuantity, ticketPriceCents, currencyCode, servesAlcohol, isCancelled, userId, startsAt, createdAt, updatedAt]
+      required: [id, name, description, location, genre, minPeople, maxPeople, reservedQuantity, ticketPriceCents, currencyCode, servesAlcohol, isCancelled, userId, startsAt, createdAt, updatedAt]
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
         description: { type: string }
         location: { type: string }
+        genre: { $ref: '#/components/schemas/EventGenre' }
         minPeople: { type: integer }
         maxPeople: { type: integer }
         reservedQuantity: { type: integer }
@@ -1161,6 +1235,7 @@ components:
         name: { type: string, minLength: 1, maxLength: 255 }
         description: { type: string, minLength: 1 }
         location: { type: string, minLength: 1, maxLength: 255 }
+        genre: { $ref: '#/components/schemas/EventGenre' }
         minPeople: { type: integer, minimum: 1 }
         maxPeople: { type: integer, minimum: 1 }
         ticketPriceCents: { type: integer, minimum: 0 }

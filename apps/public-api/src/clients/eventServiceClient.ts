@@ -6,6 +6,7 @@ import {
   InternalEventChatCardsResponseSchema,
   InternalEventSearchCandidatesResponseSchema,
   type EventChatCard,
+  type EventGenre,
   type EventSearchCandidate,
 } from "@ticket-live/contracts";
 import { z } from "zod";
@@ -20,6 +21,7 @@ const EventReadinessSchema = z.object({
 export type EventCreateInput = {
   name: string; description: string; location: string; minPeople: number; maxPeople: number;
   ticketPriceCents: number; currencyCode: string; servesAlcohol: boolean; startsAt: string;
+  genre?: EventGenre | null;
 };
 
 export class EventServiceError extends Error {
@@ -37,12 +39,16 @@ export class EventServiceClient {
   async createEvent(input: EventCreateInput, userId: string) {
     return EventCreateResponseSchema.parse(await this.request("POST", "/internal/events", input, userId));
   }
-  async searchCandidates(criteria: { text?: string; location?: string }, limit: number): Promise<EventSearchCandidate[]> {
+  async searchCandidates(criteria: { text?: string; location?: string; genre?: EventGenre }, limit: number): Promise<EventSearchCandidate[]> {
     const query = new URLSearchParams({ limit: String(limit), ...criteria });
     return InternalEventSearchCandidatesResponseSchema.parse(await this.request("GET", `/internal/event-search?${query}`)).candidates;
   }
-  async getCards(ids: string[], limit: number): Promise<EventChatCard[]> {
-    const query = new URLSearchParams({ ids: ids.join(","), limit: String(limit) });
+  async getCards(
+    ids: string[],
+    limit: number,
+    filters: { genre?: EventGenre; location?: string } = {},
+  ): Promise<EventChatCard[]> {
+    const query = new URLSearchParams({ ids: ids.join(","), limit: String(limit), ...filters });
     return InternalEventChatCardsResponseSchema.parse(await this.request("GET", `/internal/event-cards?${query}`)).cards;
   }
   private async request(method: "GET" | "POST", path: string, body?: unknown, actorUserId?: string): Promise<unknown> {

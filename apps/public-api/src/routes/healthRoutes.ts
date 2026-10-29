@@ -5,6 +5,7 @@ import { renderHttpMetrics } from "@ticket-live/runtime";
 import { exportOtlpMetrics } from "@ticket-live/runtime";
 import { getOrderServiceClient } from "../clients/orderServiceClient.ts";
 import { getTicketingServiceClient } from "../clients/ticketingServiceClient.ts";
+import { renderEventChatMetrics } from "../chat/eventChatMetrics.ts";
 
 const healthRoutes = Router();
 
@@ -36,7 +37,7 @@ healthRoutes.get("/health/ready", async (_req, res) => {
 healthRoutes.get("/metrics", async (_req, res) => {
   exportOtlpMetrics();
   res.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
-  res.status(200).send(renderHttpMetrics());
+  res.status(200).send(`${renderHttpMetrics()}${renderEventChatMetrics()}`);
 });
 
 export default healthRoutes;

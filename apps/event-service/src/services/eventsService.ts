@@ -3,7 +3,7 @@ import { db } from "../db/client.ts";
 import { eventsTable } from "../db/schema/events.ts";
 import { outboxEventsTable } from "../db/schema/outboxEvents.ts";
 import { withTraceMetadata } from "@ticket-live/runtime";
-import type { EventChatCard } from "@ticket-live/contracts";
+import type { EventChatCard, EventGenre } from "@ticket-live/contracts";
 
 export type { EventChatCard } from "@ticket-live/contracts";
 
@@ -11,6 +11,7 @@ export type CreateEventInput = {
   name: string;
   description: string;
   location: string;
+  genre?: EventGenre | null;
   minPeople: number;
   maxPeople: number;
   ticketPriceCents: number;
@@ -24,6 +25,7 @@ const eventSelection = {
   name: eventsTable.name,
   description: eventsTable.description,
   location: eventsTable.location,
+  genre: eventsTable.genre,
   minPeople: eventsTable.minPeople,
   maxPeople: eventsTable.maxPeople,
   reservedQuantity: eventsTable.reservedQuantity,
@@ -49,7 +51,12 @@ export async function getEvents() {
 /** Load fresh public event details for search hits, preserving search rank. */
 export async function getEventChatCards(
   rankedIds: string[],
-  { limit, now = new Date() }: { limit: number; now?: Date },
+  { limit, genre, location, now = new Date() }: {
+    limit: number;
+    genre?: EventGenre;
+    location?: string;
+    now?: Date;
+  },
 ): Promise<EventChatCard[]> {
   if (rankedIds.length === 0) return [];
 
@@ -59,6 +66,7 @@ export async function getEventChatCards(
       name: eventsTable.name,
       description: eventsTable.description,
       location: eventsTable.location,
+      genre: eventsTable.genre,
       startsAt: eventsTable.startsAt,
       ticketPriceCents: eventsTable.ticketPriceCents,
       currencyCode: eventsTable.currencyCode,
@@ -73,6 +81,7 @@ export async function getEventChatCards(
         isNull(eventsTable.deletedAt),
         eq(eventsTable.isCancelled, false),
         gte(eventsTable.startsAt, now),
+        ...(genre ? [eq(eventsTable.genre, genre)] : []),
       ),
     );
 
@@ -80,6 +89,10 @@ export async function getEventChatCards(
   return rankedIds.flatMap((id) => {
     const event = byId.get(id);
     if (!event) return [];
+    if (
+      location &&
+      !event.location.toLocaleLowerCase().includes(location.toLocaleLowerCase())
+    ) return [];
 
     const descriptionPreview =
       event.description.length > 240
@@ -92,6 +105,7 @@ export async function getEventChatCards(
         name: event.name,
         descriptionPreview,
         location: event.location,
+        genre: event.genre as EventGenre | null,
         startsAt: event.startsAt.toISOString(),
         ticketPriceCents: event.ticketPriceCents,
         currencyCode: event.currencyCode.trim(),

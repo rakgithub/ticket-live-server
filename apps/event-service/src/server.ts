@@ -19,6 +19,7 @@ import { httpObservabilityMiddleware } from "@ticket-live/runtime";
 import { exportOtlpMetrics } from "@ticket-live/runtime";
 import { renderHttpMetrics } from "@ticket-live/runtime";
 import { getInventoryHoldCounters } from "./services/inventoryHoldsService.ts";
+import { EventGenreSchema } from "@ticket-live/contracts";
 
 const logger = createLogger("ticket-live-event-service");
 const app = express();
@@ -29,6 +30,10 @@ const eventFieldsSchema = z.object({
   name: z.string().trim().min(1).max(255),
   description: z.string().trim().min(1),
   location: z.string().trim().min(1).max(255),
+  genre: z.preprocess(
+    (value) => typeof value === "string" ? value.trim().toLowerCase().replace(/[ _]+/g, "-") : value,
+    EventGenreSchema.nullable(),
+  ).optional(),
   minPeople: z.number().int().positive(),
   maxPeople: z.number().int().positive(),
   ticketPriceCents: z.number().int().nonnegative(),
@@ -98,18 +103,22 @@ app.delete("/internal/events/:eventId", async (req, res) => {
   res.status(204).end();
 });
 app.get("/internal/event-search", async (req, res) => {
-  const parsed = z.object({ text: z.string().trim().min(1).max(120).optional(), location: z.string().trim().min(1).max(120).optional(), limit: z.coerce.number().int().min(1).max(50).default(10) }).safeParse(req.query);
+  const parsed = z.object({ text: z.string().trim().min(1).max(120).optional(), location: z.string().trim().min(1).max(120).optional(), genre: EventGenreSchema.optional(), limit: z.coerce.number().int().min(1).max(50).default(10) }).safeParse(req.query);
   if (!parsed.success) { res.status(400).json({ error: "Invalid event search" }); return; }
   res.json(InternalEventSearchCandidatesResponseSchema.parse({
     candidates: await searchEventCandidates(parsed.data, { limit: parsed.data.limit }),
   }));
 });
 app.get("/internal/event-cards", async (req, res) => {
-  const parsed = z.object({ ids: z.string().min(1), limit: z.coerce.number().int().min(1).max(10).default(5) }).safeParse(req.query);
+  const parsed = z.object({ ids: z.string().min(1), genre: EventGenreSchema.optional(), location: z.string().trim().min(1).max(120).optional(), limit: z.coerce.number().int().min(1).max(10).default(5) }).safeParse(req.query);
   if (!parsed.success) { res.status(400).json({ error: "Invalid event card request" }); return; }
   const ids = parsed.data.ids.split(","); if (!ids.every((id) => z.uuid().safeParse(id).success)) { res.status(400).json({ error: "Invalid event card request" }); return; }
   res.json(InternalEventChatCardsResponseSchema.parse({
-    cards: await getEventChatCards(ids, { limit: parsed.data.limit }),
+    cards: await getEventChatCards(ids, {
+      limit: parsed.data.limit,
+      genre: parsed.data.genre,
+      location: parsed.data.location,
+    }),
   }));
 });
 app.post("/internal/events/:eventId/holds", async (req, res) => {

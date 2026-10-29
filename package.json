@@ -19,6 +19,7 @@
     "start:analytics-service": "pnpm --filter @ticket-live/analytics-service start",
     "start:order-service": "pnpm --filter @ticket-live/order-service start",
     "start:event-service": "pnpm --filter @ticket-live/event-service start",
+    "eval:event-chat": "node --import tsx/esm apps/public-api/src/chat/eventChatEval.ts",
     "event:rebuild-index": "pnpm --filter @ticket-live/event-service rebuild-index",
     "db:clear": "node --import tsx/esm scripts/clearDatabase.ts",
     "replay:order-confirmation": "pnpm --filter @ticket-live/order-service replay-confirmation",

@@ -353,8 +353,50 @@ reset or increase the project's Gemini quota. Frontends should use `fetch()`
 and parse the response body incrementally, since this endpoint uses POST with
 a JSON body and bearer token.
 
-Chat search only supports text and the existing free-text event location field.
-It does not answer FAQ or live availability questions, and the index remains
-eventually consistent. Event hydrates search IDs from its database to exclude
-events that are no longer active; newly created events appear after the Event
-outbox indexes them.
+Chat can filter by one explicitly named music genre from the controlled list
+`blues`, `classical`, `country`, `electronic`, `folk`, `funk`, `hip-hop`,
+`jazz`, `metal`, `pop`, `punk`, `reggae`, `rock`, and `soul`, plus the existing
+free-text event location field. Events without a genre label are excluded from
+a genre-specific search. If a request names multiple or excluded genres, chat
+asks which single genre to use. The final event cards are checked against the
+genre and location filters before they are sent. When the model supplies a
+location, the server requires that text to appear in the customer's message,
+then checks returned cards with a case-insensitive substring match. Location
+is still free text, so this does not catch every location extraction error;
+canonical city IDs are needed for that.
+
+The event creation API and Event service update API accept an optional `genre`
+field. Existing events remain unclassified until their labels are reviewed and
+set. This field is a catalog label; it is not independently verified by an
+automatic classifier.
+
+The model evaluation dataset and runner live in
+`apps/public-api/src/chat/evals/event-chat.json` and
+`apps/public-api/src/chat/eventChatEval.ts`. The expected answers are read by
+the runner after each model response; they are never sent to Gemini. Start
+PostgreSQL and Elasticsearch and set `GEMINI_API_KEY` plus the Event service
+token in `.env`. Apply migrations and rebuild the Event search index, then
+start Event before running:
+
+```sh
+pnpm exec drizzle-kit migrate
+pnpm event:rebuild-index
+pnpm start:event-service
+pnpm eval:event-chat
+pnpm eval:event-chat -- --case jazz-in-berlin
+```
+
+The report measures the model's required intent fields, the final search
+criteria, supported finish outcomes, and whether every returned card obeys
+the expected genre and location. It fails with a non-zero exit code on a
+mismatch. Add manually reviewed `expectedEventIds` for relevant events in the
+first five results to measure retrieval precision and recall; the starter
+dataset leaves these unlabelled because relevant event IDs depend on the
+catalog. The `/metrics` endpoint also exports aggregate chat outcomes,
+explicit-genre corrections, and cards discarded by the final filter. These
+counters are process-local and reset when the Public API restarts.
+
+The model does not answer FAQs or live ticket availability questions. Search
+remains eventually consistent. Event hydrates search IDs from PostgreSQL to
+exclude events that are no longer active; newly created or relabeled events
+appear after the Event outbox indexes them.

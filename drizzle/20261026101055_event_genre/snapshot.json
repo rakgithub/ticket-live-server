@@ -1,0 +1,2858 @@
+{
+  "version": "8",
+  "dialect": "postgres",
+  "id": "fea812c8-a375-4f31-a59d-c0c2ab1cd7cf",
+  "prevIds": [
+    "34d114de-fbb9-48e6-bedd-ea37a20cc6c4"
+  ],
+  "ddl": [
+    {
+      "isRlsEnabled": false,
+      "name": "users",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "revoked_access_tokens",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "checkout_attempts",
+      "entityType": "tables",
+      "schema": "order_service"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "email_replay_audits",
+      "entityType": "tables",
+      "schema": "order_service"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "outbox_events",
+      "entityType": "tables",
+      "schema": "order_service"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "orders",
+      "entityType": "tables",
+      "schema": "order_service"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "events",
+      "entityType": "tables",
+      "schema": "event_service"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "inventory_holds",
+      "entityType": "tables",
+      "schema": "event_service"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "outbox_events",
+      "entityType": "tables",
+      "schema": "event_service"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "email_deliveries",
+      "entityType": "tables",
+      "schema": "email_service"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "payments",
+      "entityType": "tables",
+      "schema": "payment_service"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "cancelled_events",
+      "entityType": "tables",
+      "schema": "ticketing_service"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "tickets",
+      "entityType": "tables",
+      "schema": "ticketing_service"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "display_name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "email",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "password_hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "deleted_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "token_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "revoked_access_tokens"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "expires_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "revoked_access_tokens"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "revoked_access_tokens"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "checkout_attempts"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "checkout_attempts"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "idempotency_key",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "checkout_attempts"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "request_hash",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "checkout_attempts"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "order_id",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "checkout_attempts"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'in_progress'",
+      "generated": null,
+      "identity": null,
+      "name": "state",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "checkout_attempts"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "response_status",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "checkout_attempts"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "response_body",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "checkout_attempts"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "checkout_attempts"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "checkout_attempts"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "email_replay_audits"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "order_id",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "email_replay_audits"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "outbox_event_id",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "email_replay_audits"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "notification_key",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "email_replay_audits"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "requested_by",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "email_replay_audits"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "reason",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "email_replay_audits"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'started'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "email_replay_audits"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "error_type",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "email_replay_audits"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "requested_at",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "email_replay_audits"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "finished_at",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "email_replay_audits"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "outbox_events"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "event_type",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "outbox_events"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "aggregate_id",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "outbox_events"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "payload",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "outbox_events"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "outbox_events"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "processed_at",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "outbox_events"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "attempts",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "outbox_events"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "available_at",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "outbox_events"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "last_error",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "outbox_events"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "orders"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "event_id",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "orders"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "orders"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "quantity",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "orders"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "orders"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "payment_id",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "orders"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "payment_status",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "orders"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "event_name_snapshot",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "orders"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "event_location_snapshot",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "orders"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "event_starts_at_snapshot",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "orders"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "customer_name_snapshot",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "orders"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "customer_email_snapshot",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "orders"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "ticket_price_cents",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "orders"
+    },
+    {
+      "type": "char(3)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "currency_code",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "orders"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "total_amount_cents",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "orders"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "expires_at",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "orders"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "orders"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "order_service",
+      "table": "orders"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "description",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "location",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "genre",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "min_people",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "max_people",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "reserved_quantity",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "baseline_sold_quantity",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "1",
+      "generated": null,
+      "identity": null,
+      "name": "version",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "ticket_price_cents",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "type": "char(3)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "currency_code",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "serves_alcohol",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "is_cancelled",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "starts_at",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "deleted_at",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "hold_id",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "inventory_holds"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "order_id",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "inventory_holds"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "event_id",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "inventory_holds"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "event_name_snapshot",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "inventory_holds"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "event_location_snapshot",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "inventory_holds"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "quantity",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "inventory_holds"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "unit_price_cents",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "inventory_holds"
+    },
+    {
+      "type": "char(3)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "currency_code",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "inventory_holds"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "event_starts_at_snapshot",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "inventory_holds"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'active'",
+      "generated": null,
+      "identity": null,
+      "name": "state",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "inventory_holds"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "expires_at",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "inventory_holds"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "inventory_holds"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "inventory_holds"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "outbox_events"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "event_type",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "outbox_events"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "aggregate_id",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "outbox_events"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "payload",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "outbox_events"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "outbox_events"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "processed_at",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "outbox_events"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "attempts",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "outbox_events"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "available_at",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "outbox_events"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "last_error",
+      "entityType": "columns",
+      "schema": "event_service",
+      "table": "outbox_events"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "email_service",
+      "table": "email_deliveries"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "event_id",
+      "entityType": "columns",
+      "schema": "email_service",
+      "table": "email_deliveries"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "notification_key",
+      "entityType": "columns",
+      "schema": "email_service",
+      "table": "email_deliveries"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "order_id",
+      "entityType": "columns",
+      "schema": "email_service",
+      "table": "email_deliveries"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "recipient_email",
+      "entityType": "columns",
+      "schema": "email_service",
+      "table": "email_deliveries"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'queued'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "email_service",
+      "table": "email_deliveries"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "provider_name",
+      "entityType": "columns",
+      "schema": "email_service",
+      "table": "email_deliveries"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "provider_message_id",
+      "entityType": "columns",
+      "schema": "email_service",
+      "table": "email_deliveries"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "provider_accepted_at",
+      "entityType": "columns",
+      "schema": "email_service",
+      "table": "email_deliveries"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "delivered_at",
+      "entityType": "columns",
+      "schema": "email_service",
+      "table": "email_deliveries"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "bounced_at",
+      "entityType": "columns",
+      "schema": "email_service",
+      "table": "email_deliveries"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "failed_at",
+      "entityType": "columns",
+      "schema": "email_service",
+      "table": "email_deliveries"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "attempts",
+      "entityType": "columns",
+      "schema": "email_service",
+      "table": "email_deliveries"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "available_at",
+      "entityType": "columns",
+      "schema": "email_service",
+      "table": "email_deliveries"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "last_attempt_at",
+      "entityType": "columns",
+      "schema": "email_service",
+      "table": "email_deliveries"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "last_error",
+      "entityType": "columns",
+      "schema": "email_service",
+      "table": "email_deliveries"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "email_service",
+      "table": "email_deliveries"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "email_service",
+      "table": "email_deliveries"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "payment_service",
+      "table": "payments"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "order_id",
+      "entityType": "columns",
+      "schema": "payment_service",
+      "table": "payments"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "gateway",
+      "entityType": "columns",
+      "schema": "payment_service",
+      "table": "payments"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "gateway_payment_id",
+      "entityType": "columns",
+      "schema": "payment_service",
+      "table": "payments"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "amount_cents",
+      "entityType": "columns",
+      "schema": "payment_service",
+      "table": "payments"
+    },
+    {
+      "type": "char(3)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "currency_code",
+      "entityType": "columns",
+      "schema": "payment_service",
+      "table": "payments"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "payment_service",
+      "table": "payments"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "payment_service",
+      "table": "payments"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "payment_service",
+      "table": "payments"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "event_id",
+      "entityType": "columns",
+      "schema": "ticketing_service",
+      "table": "cancelled_events"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "version",
+      "entityType": "columns",
+      "schema": "ticketing_service",
+      "table": "cancelled_events"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "cancelled_at",
+      "entityType": "columns",
+      "schema": "ticketing_service",
+      "table": "cancelled_events"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "ticketing_service",
+      "table": "tickets"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "order_id",
+      "entityType": "columns",
+      "schema": "ticketing_service",
+      "table": "tickets"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "event_id",
+      "entityType": "columns",
+      "schema": "ticketing_service",
+      "table": "tickets"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "ticket_number",
+      "entityType": "columns",
+      "schema": "ticketing_service",
+      "table": "tickets"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "holder_name",
+      "entityType": "columns",
+      "schema": "ticketing_service",
+      "table": "tickets"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "event_name",
+      "entityType": "columns",
+      "schema": "ticketing_service",
+      "table": "tickets"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "event_location",
+      "entityType": "columns",
+      "schema": "ticketing_service",
+      "table": "tickets"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "event_starts_at",
+      "entityType": "columns",
+      "schema": "ticketing_service",
+      "table": "tickets"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'active'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "ticketing_service",
+      "table": "tickets"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "issued_at",
+      "entityType": "columns",
+      "schema": "ticketing_service",
+      "table": "tickets"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "check_in_at",
+      "entityType": "columns",
+      "schema": "ticketing_service",
+      "table": "tickets"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "ticketing_service",
+      "table": "tickets"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "email",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "users_email_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "expires_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "revoked_access_tokens_expires_at_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "revoked_access_tokens"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "idempotency_key",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "checkout_attempts_user_key_idx",
+      "entityType": "indexes",
+      "schema": "order_service",
+      "table": "checkout_attempts"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "order_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "checkout_attempts_order_id_idx",
+      "entityType": "indexes",
+      "schema": "order_service",
+      "table": "checkout_attempts"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "state",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "updated_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "checkout_attempts_state_updated_idx",
+      "entityType": "indexes",
+      "schema": "order_service",
+      "table": "checkout_attempts"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "order_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "requested_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "email_replay_audits_order_requested_idx",
+      "entityType": "indexes",
+      "schema": "order_service",
+      "table": "email_replay_audits"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "outbox_event_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "email_replay_audits_outbox_event_idx",
+      "entityType": "indexes",
+      "schema": "order_service",
+      "table": "email_replay_audits"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "processed_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "available_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "outbox_events_pending_idx",
+      "entityType": "indexes",
+      "schema": "order_service",
+      "table": "outbox_events"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "event_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "orders_event_id_idx",
+      "entityType": "indexes",
+      "schema": "order_service",
+      "table": "orders"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "orders_user_id_idx",
+      "entityType": "indexes",
+      "schema": "order_service",
+      "table": "orders"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "events_user_id_idx",
+      "entityType": "indexes",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "starts_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "events_starts_at_idx",
+      "entityType": "indexes",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "event_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "state",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "expires_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "inventory_holds_event_state_expiry_idx",
+      "entityType": "indexes",
+      "schema": "event_service",
+      "table": "inventory_holds"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "processed_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "available_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "outbox_events_pending_idx",
+      "entityType": "indexes",
+      "schema": "event_service",
+      "table": "outbox_events"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "event_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "email_deliveries_event_id_idx",
+      "entityType": "indexes",
+      "schema": "email_service",
+      "table": "email_deliveries"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "notification_key",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "email_deliveries_notification_key_idx",
+      "entityType": "indexes",
+      "schema": "email_service",
+      "table": "email_deliveries"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "order_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "email_deliveries_order_id_idx",
+      "entityType": "indexes",
+      "schema": "email_service",
+      "table": "email_deliveries"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "gateway",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "gateway_payment_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "payments_gateway_payment_id_idx",
+      "entityType": "indexes",
+      "schema": "payment_service",
+      "table": "payments"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "order_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "payments_order_id_idx",
+      "entityType": "indexes",
+      "schema": "payment_service",
+      "table": "payments"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "order_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "ticket_number",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "tickets_order_ticket_number_idx",
+      "entityType": "indexes",
+      "schema": "ticketing_service",
+      "table": "tickets"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "event_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "status",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "tickets_event_status_idx",
+      "entityType": "indexes",
+      "schema": "ticketing_service",
+      "table": "tickets"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "order_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "tickets_order_id_idx",
+      "entityType": "indexes",
+      "schema": "ticketing_service",
+      "table": "tickets"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "event_id"
+      ],
+      "schemaTo": "event_service",
+      "tableTo": "events",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "inventory_holds_event_id_events_id_fkey",
+      "entityType": "fks",
+      "schema": "event_service",
+      "table": "inventory_holds"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "users_pkey",
+      "schema": "public",
+      "table": "users",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "token_id"
+      ],
+      "nameExplicit": false,
+      "name": "revoked_access_tokens_pkey",
+      "schema": "public",
+      "table": "revoked_access_tokens",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "checkout_attempts_pkey",
+      "schema": "order_service",
+      "table": "checkout_attempts",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "email_replay_audits_pkey",
+      "schema": "order_service",
+      "table": "email_replay_audits",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "outbox_events_pkey",
+      "schema": "order_service",
+      "table": "outbox_events",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "orders_pkey",
+      "schema": "order_service",
+      "table": "orders",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "events_pkey",
+      "schema": "event_service",
+      "table": "events",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "hold_id"
+      ],
+      "nameExplicit": false,
+      "name": "inventory_holds_pkey",
+      "schema": "event_service",
+      "table": "inventory_holds",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "outbox_events_pkey",
+      "schema": "event_service",
+      "table": "outbox_events",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "email_deliveries_pkey",
+      "schema": "email_service",
+      "table": "email_deliveries",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "payments_pkey",
+      "schema": "payment_service",
+      "table": "payments",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "event_id"
+      ],
+      "nameExplicit": false,
+      "name": "cancelled_events_pkey",
+      "schema": "ticketing_service",
+      "table": "cancelled_events",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "tickets_pkey",
+      "schema": "ticketing_service",
+      "table": "tickets",
+      "entityType": "pks"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "order_id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "inventory_holds_order_id_key",
+      "schema": "event_service",
+      "table": "inventory_holds",
+      "entityType": "uniques"
+    },
+    {
+      "value": "length(btrim(\"idempotency_key\")) BETWEEN 1 AND 255",
+      "name": "checkout_attempts_key_not_empty",
+      "entityType": "checks",
+      "schema": "order_service",
+      "table": "checkout_attempts"
+    },
+    {
+      "value": "\"request_hash\" ~ '^[0-9a-f]{64}$'",
+      "name": "checkout_attempts_request_hash_sha256",
+      "entityType": "checks",
+      "schema": "order_service",
+      "table": "checkout_attempts"
+    },
+    {
+      "value": "\"state\" IN ('in_progress', 'succeeded', 'failed')",
+      "name": "checkout_attempts_state_valid",
+      "entityType": "checks",
+      "schema": "order_service",
+      "table": "checkout_attempts"
+    },
+    {
+      "value": "(\"state\" = 'in_progress' AND \"response_status\" IS NULL AND \"response_body\" IS NULL) OR (\"state\" IN ('succeeded', 'failed') AND \"response_status\" IS NOT NULL AND \"response_body\" IS NOT NULL)",
+      "name": "checkout_attempts_response_valid",
+      "entityType": "checks",
+      "schema": "order_service",
+      "table": "checkout_attempts"
+    },
+    {
+      "value": "\"response_status\" IS NULL OR \"response_status\" BETWEEN 200 AND 599",
+      "name": "checkout_attempts_response_status_valid",
+      "entityType": "checks",
+      "schema": "order_service",
+      "table": "checkout_attempts"
+    },
+    {
+      "value": "length(btrim(\"requested_by\")) > 0",
+      "name": "email_replay_audits_requested_by_not_empty",
+      "entityType": "checks",
+      "schema": "order_service",
+      "table": "email_replay_audits"
+    },
+    {
+      "value": "length(btrim(\"reason\")) > 0",
+      "name": "email_replay_audits_reason_not_empty",
+      "entityType": "checks",
+      "schema": "order_service",
+      "table": "email_replay_audits"
+    },
+    {
+      "value": "\"status\" IN ('started', 'published', 'failed')",
+      "name": "email_replay_audits_status_valid",
+      "entityType": "checks",
+      "schema": "order_service",
+      "table": "email_replay_audits"
+    },
+    {
+      "value": "(\"status\" = 'failed') = (\"error_type\" IS NOT NULL)",
+      "name": "email_replay_audits_error_status_valid",
+      "entityType": "checks",
+      "schema": "order_service",
+      "table": "email_replay_audits"
+    },
+    {
+      "value": "\"attempts\" >= 0",
+      "name": "outbox_events_attempts_nonnegative",
+      "entityType": "checks",
+      "schema": "order_service",
+      "table": "outbox_events"
+    },
+    {
+      "value": "\"quantity\" > 0",
+      "name": "orders_quantity_positive",
+      "entityType": "checks",
+      "schema": "order_service",
+      "table": "orders"
+    },
+    {
+      "value": "\"status\" IN ('initiated', 'held', 'pending_payment', 'confirmed', 'cancelled', 'expired', 'reconciliation_required')",
+      "name": "orders_status_valid",
+      "entityType": "checks",
+      "schema": "order_service",
+      "table": "orders"
+    },
+    {
+      "value": "\"ticket_price_cents\" >= 0",
+      "name": "orders_ticket_price_nonnegative",
+      "entityType": "checks",
+      "schema": "order_service",
+      "table": "orders"
+    },
+    {
+      "value": "\"total_amount_cents\" >= 0",
+      "name": "orders_total_nonnegative",
+      "entityType": "checks",
+      "schema": "order_service",
+      "table": "orders"
+    },
+    {
+      "value": "\"payment_status\" IS NULL OR \"payment_status\" IN ('pending', 'succeeded', 'failed', 'cancelled', 'refunded')",
+      "name": "orders_payment_status_valid",
+      "entityType": "checks",
+      "schema": "order_service",
+      "table": "orders"
+    },
+    {
+      "value": "\"min_people\" > 0",
+      "name": "events_min_people_positive",
+      "entityType": "checks",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "value": "\"max_people\" >= \"min_people\"",
+      "name": "events_max_people_gte_min",
+      "entityType": "checks",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "value": "\"reserved_quantity\" >= 0 AND \"reserved_quantity\" <= \"max_people\"",
+      "name": "events_reserved_quantity_in_capacity",
+      "entityType": "checks",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "value": "\"genre\" IS NULL OR \"genre\" IN ('blues', 'classical', 'country', 'electronic', 'folk', 'funk', 'hip-hop', 'jazz', 'metal', 'pop', 'punk', 'reggae', 'rock', 'soul')",
+      "name": "events_genre_valid",
+      "entityType": "checks",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "value": "\"baseline_sold_quantity\" >= 0",
+      "name": "events_baseline_sold_nonnegative",
+      "entityType": "checks",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "value": "\"version\" > 0",
+      "name": "events_version_positive",
+      "entityType": "checks",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "value": "\"ticket_price_cents\" >= 0",
+      "name": "events_ticket_price_nonnegative",
+      "entityType": "checks",
+      "schema": "event_service",
+      "table": "events"
+    },
+    {
+      "value": "\"hold_id\" = \"order_id\"",
+      "name": "inventory_holds_id_matches_order_id",
+      "entityType": "checks",
+      "schema": "event_service",
+      "table": "inventory_holds"
+    },
+    {
+      "value": "\"quantity\" > 0",
+      "name": "inventory_holds_quantity_positive",
+      "entityType": "checks",
+      "schema": "event_service",
+      "table": "inventory_holds"
+    },
+    {
+      "value": "\"unit_price_cents\" >= 0",
+      "name": "inventory_holds_unit_price_nonnegative",
+      "entityType": "checks",
+      "schema": "event_service",
+      "table": "inventory_holds"
+    },
+    {
+      "value": "\"state\" IN ('active', 'confirmed', 'released', 'expired')",
+      "name": "inventory_holds_state_valid",
+      "entityType": "checks",
+      "schema": "event_service",
+      "table": "inventory_holds"
+    },
+    {
+      "value": "\"attempts\" >= 0",
+      "name": "outbox_events_attempts_nonnegative",
+      "entityType": "checks",
+      "schema": "event_service",
+      "table": "outbox_events"
+    },
+    {
+      "value": "\"status\" IN ('queued', 'sending', 'accepted_by_provider', 'delivered', 'bounced', 'failed', 'simulated')",
+      "name": "email_deliveries_status_valid",
+      "entityType": "checks",
+      "schema": "email_service",
+      "table": "email_deliveries"
+    },
+    {
+      "value": "\"attempts\" >= 0",
+      "name": "email_deliveries_attempts_nonnegative",
+      "entityType": "checks",
+      "schema": "email_service",
+      "table": "email_deliveries"
+    },
+    {
+      "value": "\"status\" IN ('pending', 'succeeded', 'failed', 'cancelled', 'refunded')",
+      "name": "payments_status_valid",
+      "entityType": "checks",
+      "schema": "payment_service",
+      "table": "payments"
+    },
+    {
+      "value": "\"amount_cents\" >= 0",
+      "name": "payments_amount_nonnegative",
+      "entityType": "checks",
+      "schema": "payment_service",
+      "table": "payments"
+    },
+    {
+      "value": "\"version\" > 0",
+      "name": "cancelled_events_version_positive",
+      "entityType": "checks",
+      "schema": "ticketing_service",
+      "table": "cancelled_events"
+    },
+    {
+      "value": "\"ticket_number\" > 0",
+      "name": "tickets_number_positive",
+      "entityType": "checks",
+      "schema": "ticketing_service",
+      "table": "tickets"
+    },
+    {
+      "value": "\"status\" IN ('active', 'used', 'cancelled', 'refunded')",
+      "name": "tickets_status_valid",
+      "entityType": "checks",
+      "schema": "ticketing_service",
+      "table": "tickets"
+    },
+    {
+      "value": "(\"status\" = 'used') = (\"check_in_at\" IS NOT NULL)",
+      "name": "tickets_check_in_consistent",
+      "entityType": "checks",
+      "schema": "ticketing_service",
+      "table": "tickets"
+    }
+  ],
+  "renames": []
+}

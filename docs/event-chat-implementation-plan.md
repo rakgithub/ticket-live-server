@@ -1,6 +1,6 @@
 # Event discovery chat: phased implementation plan
 
-Status: phase 1 backend implemented; production rollout still needs provider configuration, frontend integration, and the listed operational checks. Scope for the first release is **natural-language event search with a progressively displayed response and structured event cards**. FAQs, live availability, and guided follow-up questions are later phases.
+Status: phase 1 backend implemented; the event chat evaluation runner and controlled genre filter are in place. Production rollout still needs catalog label review, frontend integration, migration/index rollout, and the listed operational checks. Scope for the first release is **natural-language event search with a progressively displayed response and structured event cards**. FAQs, live availability, and guided follow-up questions are later phases.
 
 ## 1. Decision and boundaries
 
@@ -89,7 +89,7 @@ data: {"requestId":"...","finishReason":"completed"}
 
 ```
 
-Possible `finishReason` values: `completed`, `empty`, `unsupported`. Use `event: error` with a stable public error code and `requestId` for post-header errors. Never put exception traces, prompts, SQL, raw Elasticsearch documents, API keys, or provider payloads on the stream. `done` means the server completed the request; a socket close without `done` is incomplete. No automatic replay/resume in v1, so the browser must not retry a partially completed POST without a deliberate user action.
+Possible `finishReason` values: `completed`, `empty`, `unsupported`, and `clarification`. Use `event: error` with a stable public error code and `requestId` for post-header errors. Never put exception traces, prompts, SQL, raw Elasticsearch documents, API keys, or provider payloads on the stream. `done` means the server completed the request; a socket close without `done` is incomplete. No automatic replay/resume in v1, so the browser must not retry a partially completed POST without a deliberate user action.
 
 `results.events` is a typed list of cards. It is sent once in phase 1; the text can arrive in many `delta` frames. If an LLM narrative is not essential for launch, generate the one-line summary from templates and still stream it in small semantic chunks. This keeps the first release useful during provider outages and avoids paying for prose that merely repeats cards. Use an LLM for natural-language **criteria extraction** when needed; distinguish extraction latency from output streaming in metrics.
 
@@ -101,11 +101,12 @@ Create `apps/public-api/src/chat/interpretEventSearch.ts` with a strict result t
 type EventSearchCriteria = {
   text?: string;       // semantic terms, e.g. "jazz"
   location?: string;   // e.g. "Berlin"
+  genre?: EventGenre;  // one supported, explicitly named catalog genre
   limit: number;
 };
 ```
 
-The interpreter must output only this schema; validate and normalize it after the model call. The model may extract intent and terms, but it may not choose an Elasticsearch index, write Query DSL, invent filters, or grant access to data. Ignore unsupported fields instead of pretending the backend can filter by them. For example, `category` is not in the current event schema or index; do not offer reliable “music/comedy” filtering until that field exists. A simple deterministic path may handle obvious requests; use a bounded structured-output model call for less predictable language. If extraction fails or times out, either fall back to a safe whole-message search with a clear limitation or return a typed failure; do not silently broaden a restrictive request.
+The interpreter must output only this schema; validate and normalize it after the model call. The model may extract intent and terms, but it may not choose an Elasticsearch index, write Query DSL, invent filters, or grant access to data. The server independently checks explicit supported genre words, requires one unambiguous genre, and asks a clarification question if the model invents a genre or the request is ambiguous. The model may not search with an unsupported filter. If extraction fails or times out, return a typed failure; do not silently broaden a restrictive request.
 
 Add table-driven examples for location-only, text-plus-location, generic browse, ambiguous city names, quoted names, empty input, and adversarial requests. Treat the user's message as data, not as system instructions.
 
@@ -114,7 +115,8 @@ Add table-driven examples for location-only, text-plus-location, generic browse,
 Refactor `apps/event-service/src/services/eventsSearchService.ts` to accept validated criteria. Build Query DSL in code:
 
 - If `text` exists, query name and description for relevance. If absent, use an appropriate browse query rather than forcing `multi_match` on the full user sentence.
-- Apply `location` as a separate clause; the current `location` is free text, so document whether matching is approximate. A normalized city field is a later schema enhancement if exact city filtering is required.
+- Apply `location` as a separate clause; the current `location` is free text, so document whether matching is approximate. Chat requires any model-selected location to appear in the user's message and checks returned locations with a case-insensitive substring match. This cannot detect every omitted or aliased location; a normalized city field is still needed for canonical city filtering.
+- Apply `genre` as an exact filter from the supported catalog vocabulary. PostgreSQL card hydration repeats the filter and the public API checks cards once more before streaming.
 - Filter cancelled events and `startsAt >= now`; impose a size cap and deterministic tie-break ordering. Do not use model-generated raw DSL.
 - Request only IDs and minimal ranking fields from Elasticsearch. Set a short search timeout and define behavior for Elasticsearch unavailable or index missing (typed service error; do not claim no events).
 - Overfetch by a small bounded amount so PostgreSQL hydration can discard stale or ineligible hits while still filling up to `limit` cards. Do not loop indefinitely.
@@ -156,7 +158,7 @@ Render cards from structured data with normal application components. Escape tex
 
 ## 5. Phase 2 — reliable search and guided choices
 
-1. Add explicit `category`/tags and normalized city fields to PostgreSQL with a migration; update create/edit validation, index mappings, outbox payloads, and backfill. Define a controlled category vocabulary. Do not derive category solely from arbitrary descriptions.
+1. Add any further controlled event categories/tags and normalized city fields to PostgreSQL with a migration; update create/edit validation, index mappings, outbox payloads, and backfill. Do not derive categories solely from arbitrary descriptions.
 2. Implement index updates/deletes for event lifecycle changes and a repair/reindex command. Track outbox lag and index divergence.
 3. Extend criteria with `category`, date range, price range, and other filters only after each has a trustworthy source field and validation rules.
 4. Add a decision node for a genuine follow-up: when a broad search has many useful categories, return `choice` objects such as `{id, label, action:{type:"select_category",category:"music"}}`. The frontend sends the structured action back. The backend validates allowed values and repeats the search. The model may phrase the question but cannot invent action IDs or categories.
@@ -180,6 +182,34 @@ Render cards from structured data with normal application components. Escape tex
 3. Keep booking/payment actions outside the chat until explicit product requirements exist. If actions are added, use server-side authorization, typed commands, idempotency keys, and confirmation before mutations. Do not let a model directly execute arbitrary SQL or purchase tickets.
 
 ## 8. Cross-cutting quality gates
+
+### Evaluation workflow
+
+The versioned golden cases are in `apps/public-api/src/chat/evals/event-chat.json`.
+Each case contains the user message and the expected model intent fields, final
+criteria, and allowed finish reasons. Those expected values are read by the
+evaluation runner only after the production graph responds; they are never sent
+to Gemini. The runner records the model name and timestamp so reports can be
+compared when prompts or model versions change.
+
+Run `pnpm eval:event-chat` against a started Event service, a migrated catalog,
+and a rebuilt Elasticsearch index. The command exits nonzero on an intent,
+criteria, finish-reason, relevance-threshold, or card-filter mismatch. Review
+the raw model intent separately from the final criteria: the final filters may
+be corrected by deterministic checks, while the raw intent reveals extraction
+errors. Every returned card is checked against expected genre and location
+constraints. Add manually reviewed `expectedEventIds` to a case to measure
+retrieval precision and recall for the first five results; without those IDs, the report deliberately
+marks relevance as unlabelled instead of claiming retrieval accuracy.
+
+Before rollout, expand the dataset with representative phrasing, locations,
+typos, ambiguous terms, and hostile instructions from product-reviewed cases.
+Run it for each model or prompt change and retain the JSON output as a release
+artifact. Production `/metrics` exposes aggregate request outcomes, genre
+corrections, and cards rejected by the final filter. These are operational
+signals, not online accuracy scores: production accuracy still requires
+reviewed expected answers, and the current counters reset when the API process
+restarts.
 
 ### Security and privacy
 

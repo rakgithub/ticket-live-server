@@ -2,7 +2,10 @@
   "name": "@ticket-live/public-api",
   "private": true,
   "type": "module",
-  "scripts": { "start": "DOTENV_CONFIG_PATH=../../.env node --import tsx/esm src/main.ts" },
+  "scripts": {
+    "start": "DOTENV_CONFIG_PATH=../../.env node --import tsx/esm src/main.ts",
+    "eval:event-chat": "DOTENV_CONFIG_PATH=../../.env node --import tsx/esm src/chat/eventChatEval.ts"
+  },
   "dependencies": {
     "@google/genai": "^2.25.0",
     "@langchain/langgraph": "1.4.18",

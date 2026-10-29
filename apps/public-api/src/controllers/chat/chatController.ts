@@ -8,6 +8,7 @@ import {
 import { env } from "@ticket-live/runtime";
 import { createLogger } from "@ticket-live/runtime";
 import { EventServiceError } from "../../clients/eventServiceClient.ts";
+import { recordEventChatFinish } from "../../chat/eventChatMetrics.ts";
 
 const logger = createLogger("ticket-live-public-api");
 
@@ -112,7 +113,7 @@ export async function streamEventSearch(req: Request, res: Response): Promise<vo
   let timedOut = false;
   let resultsSent = false;
   let summaryTextSent = false;
-  let finishReason: "completed" | "empty" | "unsupported" = "completed";
+  let finishReason: "completed" | "empty" | "unsupported" | "clarification" = "completed";
 
   const timeout = setTimeout(() => {
     timedOut = true;
@@ -143,7 +144,10 @@ export async function streamEventSearch(req: Request, res: Response): Promise<vo
       {
         message: parsed.data.message,
         limit: parsed.data.limit,
+        generateSummary: true,
         isEventSearch: false,
+        modelIntent: null,
+        modelCriteria: {},
         criteria: {},
         candidates: [],
         cards: [],
@@ -173,8 +177,11 @@ export async function streamEventSearch(req: Request, res: Response): Promise<vo
               }
             }
             resultsSent = true;
-          } else if (nodeName === "interpretSearch" && update.finishReason === "unsupported") {
-            finishReason = "unsupported";
+          } else if (
+            nodeName === "interpretSearch" &&
+            (update.finishReason === "unsupported" || update.finishReason === "clarification")
+          ) {
+            finishReason = update.finishReason;
             if (!resultsSent) {
               writeSse(res, "results", { requestId, events: [], count: 0 });
               resultsSent = true;
@@ -222,14 +229,16 @@ export async function streamEventSearch(req: Request, res: Response): Promise<vo
       return;
     }
 
-    if (!resultsSent && finishReason !== "unsupported") {
+    if (!resultsSent && finishReason !== "unsupported" && finishReason !== "clarification") {
       writeSse(res, "results", { requestId, events: [], count: 0 });
       finishReason = "empty";
     }
 
+    recordEventChatFinish(finishReason);
     writeSse(res, "done", { requestId, finishReason });
   } catch (error) {
     if (disconnected) return;
+    recordEventChatFinish("error");
 
     if (!res.headersSent) {
       res.status(500).json({ error: "Unable to start event chat" });

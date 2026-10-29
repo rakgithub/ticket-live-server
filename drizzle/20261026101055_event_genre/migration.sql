@@ -1,0 +1,2 @@
+ALTER TABLE "event_service"."events" ADD COLUMN "genre" text;--> statement-breakpoint
+ALTER TABLE "event_service"."events" ADD CONSTRAINT "events_genre_valid" CHECK ("genre" IS NULL OR "genre" IN ('blues', 'classical', 'country', 'electronic', 'folk', 'funk', 'hip-hop', 'jazz', 'metal', 'pop', 'punk', 'reggae', 'rock', 'soul'));

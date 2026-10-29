@@ -6,6 +6,7 @@ import type { EventSearchCandidate } from "@ticket-live/contracts";
 export type EventSearchCriteria = {
   text?: string;
   location?: string;
+  genre?: string;
 };
 
 type EventSearchDocument = {
@@ -13,6 +14,7 @@ type EventSearchDocument = {
   name: string;
   description: string;
   location: string;
+  genre: string | null;
   minPeople: number;
   maxPeople: number;
   reservedQuantity: number;
@@ -65,6 +67,7 @@ export async function searchEventCandidates(
           },
         ]
       : []),
+    ...(criteria.genre ? [{ term: { genre: criteria.genre } }] : []),
   ];
 
   const must: estypes.QueryDslQueryContainer[] = criteria.text

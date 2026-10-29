@@ -24,6 +24,7 @@ async function main(): Promise<void> {
         name: event.name,
         description: event.description,
         location: event.location,
+        genre: event.genre,
         minPeople: event.minPeople,
         maxPeople: event.maxPeople,
         reservedQuantity: event.reservedQuantity,

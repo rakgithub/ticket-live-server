@@ -10,6 +10,7 @@ import {
   uuid,
   char,
 } from "drizzle-orm/pg-core";
+import { EVENT_GENRES } from "@ticket-live/contracts";
 const eventSchema = pgSchema("event_service");
 
 export const eventsTable = eventSchema.table(
@@ -19,6 +20,7 @@ export const eventsTable = eventSchema.table(
     name: text("name").notNull(),
     description: text("description").notNull(),
     location: text("location").notNull(),
+    genre: text("genre"),
     minPeople: integer("min_people").notNull(),
     maxPeople: integer("max_people").notNull(),
     reservedQuantity: integer("reserved_quantity").notNull().default(0),
@@ -46,6 +48,10 @@ export const eventsTable = eventSchema.table(
     check(
       "events_reserved_quantity_in_capacity",
       sql`${table.reservedQuantity} >= 0 AND ${table.reservedQuantity} <= ${table.maxPeople}`,
+    ),
+    check(
+      "events_genre_valid",
+      sql`${table.genre} IS NULL OR ${table.genre} IN (${sql.join(EVENT_GENRES.map((genre) => sql`${genre}`), sql`, `)})`,
     ),
     check("events_baseline_sold_nonnegative", sql`${table.baselineSoldQuantity} >= 0`),
     check("events_version_positive", sql`${table.version} > 0`),

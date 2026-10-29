@@ -24,6 +24,7 @@ export async function ensureEventsIndex(): Promise<void> {
             fields: { keyword: { type: "keyword", ignore_above: 256 } },
           },
           description: { type: "text" },
+          genre: { type: "keyword" },
           location: {
             type: "text",
             fields: { keyword: { type: "keyword", ignore_above: 256 } },
@@ -43,6 +44,11 @@ export async function ensureEventsIndex(): Promise<void> {
           isDeleted: { type: "boolean" },
         },
       },
+    });
+  } else {
+    await elasticsearch.indices.putMapping({
+      index: eventsIndexName,
+      properties: { genre: { type: "keyword" } },
     });
   }
 

@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { EventServiceError, getEventServiceClient } from "../../clients/eventServiceClient.ts";
 import { createLogger } from "@ticket-live/runtime";
+import { EventGenreSchema } from "@ticket-live/contracts";
 
 const logger = createLogger("ticket-live-public-api");
 
@@ -10,6 +11,10 @@ const createEventBodySchema = z
     name: z.string().trim().min(1).max(255),
     description: z.string().trim().min(1),
     location: z.string().trim().min(1).max(255),
+    genre: z.preprocess(
+      (value) => typeof value === "string" ? value.trim().toLowerCase().replace(/[ _]+/g, "-") : value,
+      EventGenreSchema.nullable(),
+    ).optional(),
     minPeople: z.number().int().positive(),
     maxPeople: z.number().int().positive(),
     ticketPriceCents: z.number().int().nonnegative(),
