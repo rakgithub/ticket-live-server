@@ -3,6 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test": "pnpm -w exec vitest run apps/public-api/src",
+    "test:coverage": "pnpm -w exec vitest run --coverage apps/public-api/src",
     "start": "DOTENV_CONFIG_PATH=../../.env node --import tsx/esm src/main.ts",
     "eval:event-chat": "DOTENV_CONFIG_PATH=../../.env node --import tsx/esm src/chat/eventChatEval.ts"
   },

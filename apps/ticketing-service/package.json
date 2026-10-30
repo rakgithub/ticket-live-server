@@ -2,7 +2,8 @@
   "name": "@ticket-live/ticketing-service",
   "private": true,
   "type": "module",
-  "scripts": { "start": "DOTENV_CONFIG_PATH=../../.env node --import tsx/esm src/main.ts" },
+  "scripts": { "test": "pnpm -w exec vitest run apps/ticketing-service/src",
+    "test:coverage": "pnpm -w exec vitest run --coverage apps/ticketing-service/src", "start": "DOTENV_CONFIG_PATH=../../.env node --import tsx/esm src/main.ts" },
   "dependencies": {
     "@ticket-live/contracts": "workspace:*",
     "@ticket-live/runtime": "workspace:*",

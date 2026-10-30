@@ -2,7 +2,8 @@
   "name": "@ticket-live/analytics-service",
   "private": true,
   "type": "module",
-  "scripts": { "start": "DOTENV_CONFIG_PATH=../../.env node --import tsx/esm src/main.ts" },
+  "scripts": { "test": "pnpm -w exec vitest run apps/analytics-service/src",
+    "test:coverage": "pnpm -w exec vitest run --coverage apps/analytics-service/src", "start": "DOTENV_CONFIG_PATH=../../.env node --import tsx/esm src/main.ts" },
   "dependencies": {
     "@ticket-live/runtime": "workspace:*",
     "express": "^5.2.1",

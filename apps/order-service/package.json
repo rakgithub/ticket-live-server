@@ -2,7 +2,8 @@
   "name": "@ticket-live/order-service",
   "private": true,
   "type": "module",
-  "scripts": { "start": "DOTENV_CONFIG_PATH=../../.env node --import tsx/esm src/main.ts", "worker": "DOTENV_CONFIG_PATH=../../.env node --import tsx/esm src/workerMain.ts", "replay-confirmation": "DOTENV_CONFIG_PATH=../../.env node --import tsx/esm src/replayMain.ts", "replay-tickets": "DOTENV_CONFIG_PATH=../../.env node --import tsx/esm src/ticketReplayMain.ts" },
+  "scripts": { "test": "pnpm -w exec vitest run apps/order-service/src",
+    "test:coverage": "pnpm -w exec vitest run --coverage apps/order-service/src", "start": "DOTENV_CONFIG_PATH=../../.env node --import tsx/esm src/main.ts", "worker": "DOTENV_CONFIG_PATH=../../.env node --import tsx/esm src/workerMain.ts", "replay-confirmation": "DOTENV_CONFIG_PATH=../../.env node --import tsx/esm src/replayMain.ts", "replay-tickets": "DOTENV_CONFIG_PATH=../../.env node --import tsx/esm src/ticketReplayMain.ts" },
   "dependencies": {
     "@ticket-live/contracts": "workspace:*",
     "@ticket-live/runtime": "workspace:*",
