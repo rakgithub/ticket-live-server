@@ -8,6 +8,14 @@ on:
     - cron: '17 3 * * 1'
   workflow_dispatch:
 
+env:
+  DATABASE_URL: postgres://ticketlive:ci-password@127.0.0.1:5432/ticket_live
+  ORDER_SERVICE_DATABASE_URL: postgres://ticketlive:ci-password@127.0.0.1:5432/ticket_live
+  EVENT_SERVICE_DATABASE_URL: postgres://ticketlive:ci-password@127.0.0.1:5432/ticket_live
+  EMAIL_SERVICE_DATABASE_URL: postgres://ticketlive:ci-password@127.0.0.1:5432/ticket_live
+  PAYMENT_SERVICE_DATABASE_URL: postgres://ticketlive:ci-password@127.0.0.1:5432/ticket_live
+  TICKETING_SERVICE_DATABASE_URL: postgres://ticketlive:ci-password@127.0.0.1:5432/ticket_live
+
 permissions:
   contents: read
 
