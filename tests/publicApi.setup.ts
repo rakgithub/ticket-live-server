@@ -1,0 +1,12 @@
+process.env.NODE_ENV = "test";
+process.env.TICKETLIVE_SERVICE = "public-api";
+process.env.JWT_SECRET = "public-api-test-secret-that-is-long-enough-for-tests";
+process.env.PUBLIC_API_ORDER_TOKEN = "public-api-test-order-token-123456789012";
+process.env.PUBLIC_API_EVENT_TOKEN = "public-api-test-event-token-123456789012";
+process.env.PUBLIC_API_TICKETING_TOKEN = "public-api-test-ticket-token-123456789012";
+process.env.EVENT_SERVICE_URL = "http://127.0.0.1:1";
+process.env.ORDER_SERVICE_URL = "http://127.0.0.1:1";
+process.env.TICKETING_SERVICE_URL = "http://127.0.0.1:1";
+process.env.GEMINI_API_KEY = "";
+process.env.OTEL_EXPORTER_OTLP_ENDPOINT = "";
+process.env.TICKETS_PORTAL_URL = "http://tickets.test/my-tickets";

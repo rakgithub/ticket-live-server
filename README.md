@@ -178,6 +178,15 @@ pnpm typecheck
 pnpm test
 ```
 
+Public API tests can be run separately. The fast HTTP suite needs no database;
+the identity integration suite starts a disposable PostgreSQL container through
+Testcontainers and requires Docker:
+
+```sh
+pnpm test:public-api
+pnpm test:public-api:integration
+```
+
 Service-only endpoints under `/internal` use separate credentials for the
 public API to Order, public API to Event, Order to Event, and Email's internal
 lookup. Production startup rejects the shared development fallback. Do not

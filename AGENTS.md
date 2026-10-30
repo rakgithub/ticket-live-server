@@ -1,42 +1,26 @@
-# Agent guide
+# Ticket live engineering guide
 
-## Start here
+Ticket Live is a Node.js and TypeScript backend for discovering events and booking tickets. Its services manage event inventory, checkout, payments, ticket issuance, and confirmation delivery.
 
-- Read `README.md` for local setup and current behavior.
+## Repository layout
+- This is a pnpm 11 workspace.
+- `apps/` contains the public API and the Event, Order, Payment, Ticketing, Email, and Analytics services.
+- `packages/contracts/` contains shared wire contracts; `packages/runtime/` contains shared runtime utilities.
+- `docs/` contains architecture and contract documentation; `drizzle/` contains database migrations.
 
-- This is a pnpm 11 workspace. Runtime code and service-owned Drizzle models live in `apps/public-api`, `apps/order-service`, `apps/event-service`, and `apps/email-service`. `packages/contracts` holds shared wire contracts; `packages/runtime` holds generic environment, internal-auth, and observability helpers. Do not import another app's implementation or database models.
-- Before editing, check `git status` and nearby code. Preserve existing local changes and follow the conventions of the files you touch.
+Read the relevant convention files before planning, implementing, testing, or verifying a change.
 
-## Planning and implementation workflow
+## TypeScript Conventions
+Reference `docs/guardrails/typescript-conventions.md` for detailed typescript conventions
 
-- Classify tasks by complexity, ambiguity, and risk before making changes.
-- For new features, significant refactoring, architectural changes, or complex cross-boundary bug fixes, use the `grill-me` skill to clarify requirements and produce an implementation-ready plan.
-- For small, well-defined changes and straightforward bug fixes, investigate and implement directly. Do not introduce unnecessary planning rounds.
-- Before planning, inspect the relevant codebase, existing contracts, architecture, and documentation. Do not ask questions that can be answered from the repository.
-- Challenge unnecessary complexity and technology choices. Prefer existing infrastructure and established patterns unless requirements justify alternatives.
-- The planning process owns consequential technical decisions, including architecture, technology selection, API contracts, data models, messaging patterns, and integration strategies.
-- Evaluate technical alternatives based on actual requirements, operational complexity, reliability, maintainability, and compatibility with existing systems.
-- During planning, identify dependencies, edge cases, failure modes, and verification requirements.
-- For non-trivial changes, present the proposed approach, affected modules, implementation steps, and risks. Wait for user approval before writing production code.
-- During implementation, follow the approved plan and existing repository conventions. Minor implementation details may be resolved independently.
-- If implementation reveals a consequential issue with the approved plan, stop and request clarification rather than silently changing the architecture.
-- Never introduce new infrastructure, dependencies, or client-visible behavior without justification and appropriate approval.
-- Do not use the planning workflow to bypass repository safety rules or explicit approval requirements.
+## Planning conventions
+Reference `docs/guardrails/planning-conventions.md` for detailed planning conventions
 
-## Working in this repo
+## Implementation Conventions
+Reference `docs/guardrails/implementation-conventions.md` for detailed implementation conventions
 
-- Keep changes focused. Ask the user before a large change or a client-visible contract change.
-- For API or message changes, update the relevant Zod schemas in `packages/contracts/src/` and the matching OpenAPI or AsyncAPI files in `docs/contracts/`. Keep producers and consumers compatible with existing versioned messages.
-- For database changes, update the owning models in that service's `apps/<service>/src/db/schema/` and add a reviewed Drizzle migration under `drizzle/`. Use `MIGRATION_DATABASE_URL` for migrations. Do not run `db:clear`, reset volumes, or apply destructive migrations without explicit approval.
-- Preserve checkout idempotency, capacity checks, order/payment state transitions, and transactional outbox behavior. Keep secrets and customer data out of logs. Read the affected service and worker paths before changing a cross-boundary flow.
+## Testing Conventions
+Reference `docs/guardrails/testing-conventions.md` for detailed testing conventions
 
-## Commands and verification
-- Install dependencies: `pnpm install`. Local infrastructure and startup steps are in `README.md`.
-- API: `pnpm start`; outbox worker: `pnpm start:worker`; email worker: `pnpm start:email-worker`.
-- Quality checks: `pnpm lint`, `pnpm typecheck`, and `pnpm test`.
-- Database migrations: `pnpm exec drizzle-kit migrate` after reviewing the generated SQL and confirming the target database.
-- Verify focused changes with appropriate checks and report what ran and what could not be checked.
-
-## Finish
-
-- Keep explanations concise. Report what changed, what was verified, and any material limitation.
+## Verification Conventions
+Reference `docs/guardrails/verification-conventions.md` for detailed verification conventions
