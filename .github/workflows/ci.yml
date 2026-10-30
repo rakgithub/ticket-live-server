@@ -2,19 +2,12 @@ name: CI
 
 on:
   pull_request:
+  merge_group:
   push:
     branches: [main]
   schedule:
     - cron: '17 3 * * 1'
   workflow_dispatch:
-
-env:
-  DATABASE_URL: postgres://ticketlive:ci-password@127.0.0.1:5432/ticket_live
-  ORDER_SERVICE_DATABASE_URL: postgres://ticketlive:ci-password@127.0.0.1:5432/ticket_live
-  EVENT_SERVICE_DATABASE_URL: postgres://ticketlive:ci-password@127.0.0.1:5432/ticket_live
-  EMAIL_SERVICE_DATABASE_URL: postgres://ticketlive:ci-password@127.0.0.1:5432/ticket_live
-  PAYMENT_SERVICE_DATABASE_URL: postgres://ticketlive:ci-password@127.0.0.1:5432/ticket_live
-  TICKETING_SERVICE_DATABASE_URL: postgres://ticketlive:ci-password@127.0.0.1:5432/ticket_live
 
 permissions:
   contents: read
@@ -24,8 +17,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  checks:
-    name: Repository-wide checks
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -33,17 +26,49 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
-      - name: Enable pnpm
-        run: corepack enable
+      - name: Enable and pin pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm test
 
-  app-tests:
-    name: Tests (${{ matrix.app }})
+  typecheck:
+    name: Typecheck
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - name: Enable and pin pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+
+  app-tests:
+    name: Unit tests (${{ matrix.app }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Unit tests validate configuration but do not connect to these URLs.
+      DATABASE_URL: postgres://ticketlive:ci-placeholder@127.0.0.1:5432/ticket_live
+      ORDER_SERVICE_DATABASE_URL: postgres://ticketlive:ci-placeholder@127.0.0.1:5432/ticket_live
+      EVENT_SERVICE_DATABASE_URL: postgres://ticketlive:ci-placeholder@127.0.0.1:5432/ticket_live
+      EMAIL_SERVICE_DATABASE_URL: postgres://ticketlive:ci-placeholder@127.0.0.1:5432/ticket_live
+      PAYMENT_SERVICE_DATABASE_URL: postgres://ticketlive:ci-placeholder@127.0.0.1:5432/ticket_live
+      TICKETING_SERVICE_DATABASE_URL: postgres://ticketlive:ci-placeholder@127.0.0.1:5432/ticket_live
     strategy:
       fail-fast: false
       matrix:
@@ -60,25 +85,107 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
-      - name: Enable pnpm
-        run: corepack enable
+      - name: Enable and pin pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Run service tests
         run: pnpm --filter "@ticket-live/${{ matrix.app }}" test
 
   integration:
-    name: Public API integration tests
+    name: Integration tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      rabbitmq:
+        image: rabbitmq:4.2.6-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: ci
+          RABBITMQ_DEFAULT_PASS: ci-rabbitmq-password
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_RABBITMQ_URL: amqp://ci:ci-rabbitmq-password@127.0.0.1:5672/%2F
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
-      - name: Enable pnpm
-        run: corepack enable
+      - name: Enable and pin pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test:public-api:integration
+      - run: pnpm test:integration
+
+  outbox-integration:
+    name: Order outbox integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      rabbitmq:
+        image: rabbitmq:4.2.6-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: ci
+          RABBITMQ_DEFAULT_PASS: ci-rabbitmq-password
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_RABBITMQ_URL: amqp://ci:ci-rabbitmq-password@127.0.0.1:5672/%2F
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - name: Enable and pin pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:outbox:integration
+
+  shared-tests:
+    name: Shared contract tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - name: Enable and pin pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:contracts
 
   container:
     name: Container and Compose validation
@@ -92,3 +199,64 @@ jobs:
         run: docker build --target runtime -t ticket-live-app:ci .
       - name: Build migration image
         run: docker build --target migrations -t ticket-live-migrations:ci .
+
+  workflow-validation:
+    name: Workflow validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install actionlint 1.7.12
+        run: |
+          curl --fail --silent --show-error --location \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz \
+            --output "$RUNNER_TEMP/actionlint.tar.gz"
+          curl --fail --silent --show-error --location \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_checksums.txt \
+            --output "$RUNNER_TEMP/actionlint_checksums.txt"
+          grep ' actionlint_1.7.12_linux_amd64.tar.gz$' "$RUNNER_TEMP/actionlint_checksums.txt" \
+            | (cd "$RUNNER_TEMP" && sha256sum --check)
+          tar --extract --gzip --file "$RUNNER_TEMP/actionlint.tar.gz" --directory "$RUNNER_TEMP" actionlint
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - run: actionlint -color
+
+  ci-required:
+    name: CI required
+    if: ${{ always() }}
+    needs:
+      - lint
+      - typecheck
+      - app-tests
+      - integration
+      - outbox-integration
+      - shared-tests
+      - container
+      - workflow-validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every CI job to succeed
+        env:
+          LINT_RESULT: ${{ needs.lint.result }}
+          TYPECHECK_RESULT: ${{ needs.typecheck.result }}
+          APP_TESTS_RESULT: ${{ needs.app-tests.result }}
+          INTEGRATION_RESULT: ${{ needs.integration.result }}
+          OUTBOX_INTEGRATION_RESULT: ${{ needs.outbox-integration.result }}
+          SHARED_TESTS_RESULT: ${{ needs.shared-tests.result }}
+          CONTAINER_RESULT: ${{ needs.container.result }}
+          WORKFLOW_VALIDATION_RESULT: ${{ needs.workflow-validation.result }}
+        run: |
+          for result in \
+            "$LINT_RESULT" \
+            "$TYPECHECK_RESULT" \
+            "$APP_TESTS_RESULT" \
+            "$INTEGRATION_RESULT" \
+            "$OUTBOX_INTEGRATION_RESULT" \
+            "$SHARED_TESTS_RESULT" \
+            "$CONTAINER_RESULT" \
+            "$WORKFLOW_VALIDATION_RESULT"; do
+            if [[ "$result" != "success" ]]; then
+              echo "A required CI job did not succeed: $result"
+              exit 1
+            fi
+          done

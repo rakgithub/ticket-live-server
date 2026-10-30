@@ -178,14 +178,35 @@ pnpm typecheck
 pnpm test
 ```
 
-Public API tests can be run separately. The fast HTTP suite needs no database;
-the identity integration suite starts a disposable PostgreSQL container through
-Testcontainers and requires Docker:
+Public API unit tests need no database. The authentication integration test
+starts a disposable PostgreSQL container through Testcontainers and requires
+Docker. The full integration suite also requires an isolated RabbitMQ broker;
+all database URLs come from disposable PostgreSQL containers, not `.env`:
 
 ```sh
 pnpm test:public-api
 pnpm test:public-api:integration
 ```
+
+To run the full integration suites, start an isolated RabbitMQ instance on port
+`5673`, then run the suites against it. The shell trap stops the temporary
+broker even if a suite fails:
+
+```sh
+set -e
+docker run --rm --detach --name ticket-live-ci-rabbitmq \
+  --publish 5673:5672 \
+  --env RABBITMQ_DEFAULT_USER=ci \
+  --env RABBITMQ_DEFAULT_PASS=ci-rabbitmq-password \
+  rabbitmq:4.2.6-management-alpine
+trap 'docker stop ticket-live-ci-rabbitmq >/dev/null' EXIT
+export TEST_RABBITMQ_URL='amqp://ci:ci-rabbitmq-password@127.0.0.1:5673/%2F'
+pnpm test:integration
+pnpm test:outbox:integration
+```
+
+Do not point integration tests at a shared development or production broker.
+GitHub Actions starts isolated RabbitMQ service containers for these jobs.
 
 Service-only endpoints under `/internal` use separate credentials for the
 public API to Order, public API to Event, Order to Event, and Email's internal
