@@ -39,6 +39,7 @@ describe("Order confirmation Email replay", () => {
         eventName: "Example Concert",
         eventLocation: "Berlin",
         eventStartsAt: "2026-11-13T19:00:00Z",
+        ticketsUrl: "http://tickets.test/my-tickets",
         quantity: 2,
         totalAmountCents: 8_000,
         currencyCode: "EUR",
