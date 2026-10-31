@@ -1,0 +1,268 @@
+name: Security
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: '47 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Review new dependency versions, vulnerabilities, and licenses
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          deny-licenses: AGPL-1.0, AGPL-1.0-only, AGPL-1.0-or-later, AGPL-3.0, AGPL-3.0-only, AGPL-3.0-or-later, GPL-2.0, GPL-2.0-only, GPL-2.0-or-later, GPL-3.0, GPL-3.0-only, GPL-3.0-or-later
+          license-check: true
+          vulnerability-check: true
+          show-patched-versions: true
+
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language:
+          - javascript-typescript
+          - actions
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended
+      - name: Analyze code
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+        with:
+          category: /language:${{ matrix.language }}
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Install pinned Gitleaks
+        run: bash scripts/ci/install-gitleaks.sh
+      - name: Scan current files and git history
+        run: >-
+          gitleaks git --config .gitleaks.toml --redact=100
+          --report-format sarif --report-path "$RUNNER_TEMP/gitleaks.sarif"
+          --exit-code 1 .
+      - name: Upload redacted secret scan report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: secret-scan-report
+          path: ${{ runner.temp }}/gitleaks.sarif
+          if-no-files-found: ignore
+          retention-days: 7
+
+  dependency-scan:
+    name: Dependency vulnerability scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Validate time-limited vulnerability exceptions
+        run: node scripts/ci/validate-trivy-exceptions.mjs
+      - name: Scan lockfiles for high and critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          trivyignores: .trivyignore.yaml
+          format: json
+          output: ${{ runner.temp }}/dependency-vulnerabilities.json
+          exit-code: '1'
+      - name: Upload dependency vulnerability report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dependency-vulnerability-report
+          path: ${{ runner.temp }}/dependency-vulnerabilities.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+  image-scan:
+    name: Container image scan (${{ matrix.image.target }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - target: runtime
+            tag: ticket-live-app
+          - target: migrations
+            tag: ticket-live-migrations
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Build production image
+        run: docker build --target "${{ matrix.image.target }}" -t "${{ matrix.image.tag }}:security" .
+      - name: Scan production image for high and critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ matrix.image.tag }}:security
+          severity: HIGH,CRITICAL
+          trivyignores: .trivyignore.yaml
+          format: json
+          output: ${{ runner.temp }}/${{ matrix.image.tag }}-vulnerabilities.json
+          exit-code: '1'
+      - name: Upload container vulnerability report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ matrix.image.tag }}-vulnerability-report
+          path: ${{ runner.temp }}/${{ matrix.image.tag }}-vulnerabilities.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+  security-fixtures:
+    name: Validate security scanner fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install pinned Gitleaks
+        run: bash scripts/ci/install-gitleaks.sh
+      - name: Create temporary synthetic secret and vulnerable dependency
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/security-fixtures/secret" "$RUNNER_TEMP/security-fixtures/vulnerable"
+          fake_suffix="$(openssl rand -hex 8 | tr '[:lower:]' '[:upper:]')"
+          printf 'AWS_ACCESS_KEY_ID=AKIA%s\n' "$fake_suffix" > "$RUNNER_TEMP/security-fixtures/secret/example.env"
+          cat > "$RUNNER_TEMP/security-fixtures/vulnerable/package-lock.json" <<'JSON'
+          {
+            "name": "security-fixture",
+            "version": "1.0.0",
+            "lockfileVersion": 3,
+            "requires": true,
+            "packages": {
+              "": { "name": "security-fixture", "version": "1.0.0" },
+              "node_modules/lodash": { "version": "4.17.20" }
+            }
+          }
+          JSON
+      - name: Confirm Gitleaks detects the synthetic secret
+        run: |
+          set +e
+          gitleaks dir --config .gitleaks.toml --redact=100 --report-format json \
+            --report-path "$RUNNER_TEMP/secret-fixture-report.json" --exit-code 1 \
+            "$RUNNER_TEMP/security-fixtures/secret"
+          scan_status=$?
+          set -e
+          if [[ "$scan_status" -ne 1 ]]; then
+            echo "Expected Gitleaks to reject the synthetic secret fixture (exit $scan_status)."
+            exit 1
+          fi
+          jq -e 'length > 0' "$RUNNER_TEMP/secret-fixture-report.json" > /dev/null
+      - name: Confirm Trivy detects the vulnerable dependency
+        id: vulnerable-fixture
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: ${{ runner.temp }}/security-fixtures/vulnerable
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          format: json
+          output: ${{ runner.temp }}/vulnerable-dependency-fixture-report.json
+          exit-code: '1'
+      - name: Verify Trivy rejected the vulnerable dependency
+        env:
+          SCAN_OUTCOME: ${{ steps.vulnerable-fixture.outcome }}
+        run: |
+          if [[ "$SCAN_OUTCOME" != "failure" ]]; then
+            echo "Expected Trivy to reject the vulnerable dependency fixture."
+            exit 1
+          fi
+          jq -e '[.Results[]?.Vulnerabilities[]? | select(.VulnerabilityID == "CVE-2021-23337")] | length > 0' \
+            "$RUNNER_TEMP/vulnerable-dependency-fixture-report.json" > /dev/null
+      - name: Remove temporary scanner fixtures and reports
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/security-fixtures" "$RUNNER_TEMP/secret-fixture-report.json" "$RUNNER_TEMP/vulnerable-dependency-fixture-report.json"
+
+  notify-scheduled-failure:
+    name: Notify repository owner about scheduled findings
+    if: ${{ always() && github.event_name == 'schedule' && contains(needs.*.result, 'failure') }}
+    needs:
+      - dependency-review
+      - codeql
+      - secret-scan
+      - dependency-scan
+      - image-scan
+      - security-fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open or update the scheduled security issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPENDENCY_REVIEW_RESULT: ${{ needs.dependency-review.result }}
+          CODEQL_RESULT: ${{ needs.codeql.result }}
+          SECRET_SCAN_RESULT: ${{ needs.secret-scan.result }}
+          DEPENDENCY_SCAN_RESULT: ${{ needs.dependency-scan.result }}
+          IMAGE_SCAN_RESULT: ${{ needs.image-scan.result }}
+          FIXTURE_RESULT: ${{ needs.security-fixtures.result }}
+        run: |
+          set -euo pipefail
+          title="Scheduled security scan failed"
+          issue_number="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 100 \
+            --json number,title --jq '.[] | select(.title == "Scheduled security scan failed") | .number' | head -n 1)"
+          body="$(cat <<EOF
+          The scheduled security workflow reported one or more failures.
+
+          Run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+
+          Dependency review: ${DEPENDENCY_REVIEW_RESULT}
+          CodeQL: ${CODEQL_RESULT}
+          Secret scan: ${SECRET_SCAN_RESULT}
+          Dependency scan: ${DEPENDENCY_SCAN_RESULT}
+          Container image scan: ${IMAGE_SCAN_RESULT}
+          Scanner fixtures: ${FIXTURE_RESULT}
+
+          Review the run's retained reports, fix actionable findings, or record a time-limited exception in `.trivyignore.yaml` with an owner and reason.
+          EOF
+          )"
+          if [[ -n "$issue_number" ]]; then
+            gh issue edit "$issue_number" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body" \
+              --assignee "$GITHUB_REPOSITORY_OWNER"
+          fi

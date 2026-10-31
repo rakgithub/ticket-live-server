@@ -1,0 +1,383 @@
+name: CI
+
+on:
+  pull_request:
+  merge_group:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - name: Enable and pin pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - name: Enable and pin pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+
+  app-tests:
+    name: Unit tests (${{ matrix.app }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Unit tests validate configuration but do not connect to these URLs.
+      DATABASE_URL: postgres://ticketlive:ci-placeholder@127.0.0.1:5432/ticket_live
+      ORDER_SERVICE_DATABASE_URL: postgres://ticketlive:ci-placeholder@127.0.0.1:5432/ticket_live
+      EVENT_SERVICE_DATABASE_URL: postgres://ticketlive:ci-placeholder@127.0.0.1:5432/ticket_live
+      EMAIL_SERVICE_DATABASE_URL: postgres://ticketlive:ci-placeholder@127.0.0.1:5432/ticket_live
+      PAYMENT_SERVICE_DATABASE_URL: postgres://ticketlive:ci-placeholder@127.0.0.1:5432/ticket_live
+      TICKETING_SERVICE_DATABASE_URL: postgres://ticketlive:ci-placeholder@127.0.0.1:5432/ticket_live
+    strategy:
+      fail-fast: false
+      matrix:
+        app:
+          - public-api
+          - event-service
+          - order-service
+          - payment-service
+          - email-service
+          - ticketing-service
+          - analytics-service
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - name: Enable and pin pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run service tests with coverage and JUnit report
+        run: |
+          mkdir -p test-results
+          pnpm exec vitest run "apps/${{ matrix.app }}/src" --coverage \
+            --coverage.include="apps/${{ matrix.app }}/src/**/*.ts" \
+            --coverage.reportsDirectory="coverage/${{ matrix.app }}" \
+            --coverage.reporter=text --coverage.reporter=lcov \
+            --coverage.reporter=json-summary \
+            --reporter=default --reporter=junit \
+            --outputFile.junit="test-results/${{ matrix.app }}.xml"
+      - name: Upload service test and coverage reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-reports-${{ matrix.app }}
+          path: |
+            test-results/${{ matrix.app }}.xml
+            coverage/${{ matrix.app }}/lcov.info
+            coverage/${{ matrix.app }}/coverage-summary.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      rabbitmq:
+        image: rabbitmq:4.2.6-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: ci
+          RABBITMQ_DEFAULT_PASS: ci-rabbitmq-password
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_RABBITMQ_URL: amqp://ci:ci-rabbitmq-password@127.0.0.1:5672/%2F
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - name: Enable and pin pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run integration tests with JUnit report
+        run: |
+          mkdir -p test-results
+          pnpm exec vitest run --config vitest.integration.config.ts \
+            --reporter=default --reporter=junit \
+            --outputFile.junit=test-results/integration.xml
+      - name: Upload integration test report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: integration-test-report
+          path: test-results/integration.xml
+          if-no-files-found: warn
+          retention-days: 14
+
+  outbox-integration:
+    name: Order outbox integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      rabbitmq:
+        image: rabbitmq:4.2.6-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: ci
+          RABBITMQ_DEFAULT_PASS: ci-rabbitmq-password
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_RABBITMQ_URL: amqp://ci:ci-rabbitmq-password@127.0.0.1:5672/%2F
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - name: Enable and pin pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run outbox integration tests with JUnit report
+        run: |
+          mkdir -p test-results
+          pnpm exec vitest run --config vitest.outbox.integration.config.ts \
+            --reporter=default --reporter=junit \
+            --outputFile.junit=test-results/outbox-integration.xml
+      - name: Upload outbox integration test report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: outbox-integration-test-report
+          path: test-results/outbox-integration.xml
+          if-no-files-found: warn
+          retention-days: 14
+
+  shared-tests:
+    name: Shared contract tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - name: Enable and pin pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run contract tests with JUnit report
+        run: |
+          mkdir -p test-results
+          pnpm exec vitest run packages/contracts/src \
+            --reporter=default --reporter=junit \
+            --outputFile.junit=test-results/contracts.xml
+      - name: Upload contract test report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: contract-test-report
+          path: test-results/contracts.xml
+          if-no-files-found: warn
+          retention-days: 14
+
+  container:
+    name: Container and Compose validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      COMPOSE_PROJECT_NAME: ticketlive-ci-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Validate Compose configuration
+        run: docker compose --env-file .env.ci.example -f compose.yaml -f compose.ci.yaml config --quiet
+      - name: Build application image
+        run: docker build --target runtime -t ticket-live-app:local .
+      - name: Build migration image
+        run: docker build --target migrations -t ticket-live-migrations:local .
+      - name: Start disposable infrastructure
+        run: >-
+          docker compose --env-file .env.ci.example -f compose.yaml -f compose.ci.yaml
+          up -d --wait --wait-timeout 180 postgres elasticsearch rabbitmq
+      - name: Create service database roles
+        run: >-
+          docker compose --env-file .env.ci.example -f compose.yaml -f compose.ci.yaml
+          --profile bootstrap run --rm -T db-role-bootstrap
+      - name: Create service RabbitMQ users
+        run: >-
+          docker compose --env-file .env.ci.example -f compose.yaml -f compose.ci.yaml
+          --profile bootstrap run --rm -T rabbitmq-role-bootstrap
+      - name: Apply database migrations
+        run: >-
+          docker compose --env-file .env.ci.example -f compose.yaml -f compose.ci.yaml
+          --profile tooling run --rm -T migrations
+      - name: Start all application services and wait for readiness
+        run: >-
+          docker compose --env-file .env.ci.example -f compose.yaml -f compose.ci.yaml
+          --profile apps up -d --wait --wait-timeout 180
+      - name: Exercise booking and RabbitMQ recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          compose=(docker compose --env-file .env.ci.example -f compose.yaml -f compose.ci.yaml)
+          smoke_output="$("${compose[@]}" --profile smoke run --rm -T --no-deps booking-smoke prepare)"
+          smoke_state="${smoke_output##*CI_SMOKE_STATE:}"
+          if [[ "$smoke_state" == "$smoke_output" || -z "$smoke_state" ]]; then
+            echo "Container booking preparation did not return its state."
+            exit 1
+          fi
+          "${compose[@]}" stop --timeout 5 rabbitmq
+          booking_output="$(SMOKE_STATE_JSON="$smoke_state" "${compose[@]}" --profile smoke run --rm -T --no-deps -e SMOKE_STATE_JSON booking-smoke book)"
+          booking_state="${booking_output##*CI_SMOKE_STATE:}"
+          if [[ "$booking_state" == "$booking_output" || -z "$booking_state" ]]; then
+            echo "Container booking did not return its state."
+            exit 1
+          fi
+          "${compose[@]}" start rabbitmq
+          "${compose[@]}" --profile apps up -d --wait --wait-timeout 180
+          SMOKE_STATE_JSON="$booking_state" "${compose[@]}" --profile smoke run --rm -T --no-deps -e SMOKE_STATE_JSON booking-smoke verify
+      - name: Capture Compose logs after failure
+        if: failure()
+        run: >-
+          docker compose --env-file .env.ci.example -f compose.yaml -f compose.ci.yaml
+          --profile apps --profile bootstrap --profile tooling --profile smoke
+          logs --no-color --timestamps > "$RUNNER_TEMP/compose.log" || true
+      - name: Upload Compose logs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: container-compose-logs
+          path: ${{ runner.temp }}/compose.log
+          if-no-files-found: ignore
+          retention-days: 5
+      - name: Remove disposable Compose stack and volumes
+        if: always()
+        run: >-
+          docker compose --env-file .env.ci.example -f compose.yaml -f compose.ci.yaml
+          --profile apps --profile bootstrap --profile tooling --profile smoke
+          down --volumes --remove-orphans
+
+  workflow-validation:
+    name: Workflow validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install actionlint 1.7.12
+        run: |
+          curl --fail --silent --show-error --location \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz \
+            --output "$RUNNER_TEMP/actionlint.tar.gz"
+          curl --fail --silent --show-error --location \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_checksums.txt \
+            --output "$RUNNER_TEMP/actionlint_checksums.txt"
+          grep ' actionlint_1.7.12_linux_amd64.tar.gz$' "$RUNNER_TEMP/actionlint_checksums.txt" \
+            | (cd "$RUNNER_TEMP" && sha256sum --check)
+          tar --extract --gzip --file "$RUNNER_TEMP/actionlint.tar.gz" --directory "$RUNNER_TEMP" actionlint
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - run: actionlint -color
+
+  ci-required:
+    name: CI required
+    if: ${{ always() }}
+    needs:
+      - lint
+      - typecheck
+      - app-tests
+      - integration
+      - outbox-integration
+      - shared-tests
+      - container
+      - workflow-validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every CI job to succeed
+        env:
+          LINT_RESULT: ${{ needs.lint.result }}
+          TYPECHECK_RESULT: ${{ needs.typecheck.result }}
+          APP_TESTS_RESULT: ${{ needs.app-tests.result }}
+          INTEGRATION_RESULT: ${{ needs.integration.result }}
+          OUTBOX_INTEGRATION_RESULT: ${{ needs.outbox-integration.result }}
+          SHARED_TESTS_RESULT: ${{ needs.shared-tests.result }}
+          CONTAINER_RESULT: ${{ needs.container.result }}
+          WORKFLOW_VALIDATION_RESULT: ${{ needs.workflow-validation.result }}
+        run: |
+          for result in \
+            "$LINT_RESULT" \
+            "$TYPECHECK_RESULT" \
+            "$APP_TESTS_RESULT" \
+            "$INTEGRATION_RESULT" \
+            "$OUTBOX_INTEGRATION_RESULT" \
+            "$SHARED_TESTS_RESULT" \
+            "$CONTAINER_RESULT" \
+            "$WORKFLOW_VALIDATION_RESULT"; do
+            if [[ "$result" != "success" ]]; then
+              echo "A required CI job did not succeed: $result"
+              exit 1
+            fi
+          done

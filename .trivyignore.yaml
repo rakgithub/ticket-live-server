@@ -1,0 +1,8 @@
+# Vulnerability exceptions must have an owner and reason in `statement`, and a
+# near-term `expired_at` date. Trivy makes expired findings visible again.
+# Until Step 6 confirms service teams, use the repository owner:
+# vulnerabilities:
+#   - id: CVE-YYYY-NNNN
+#     statement: "owner=@rakgithub; reason=..."
+#     expired_at: YYYY-MM-DD
+vulnerabilities: []

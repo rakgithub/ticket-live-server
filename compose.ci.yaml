@@ -1,0 +1,23 @@
+services:
+  public-api:
+    environment:
+      NODE_OPTIONS: --import=/app/scripts/ci-gemini-fetch-stub.mjs
+
+  email-service:
+    environment:
+      EMAIL_PROVIDER: fake
+
+  payment-service:
+    environment:
+      MOCK_PAYMENT_DELAY_MS: 0
+      MOCK_PAYMENT_FAILURE_RATE: 0
+
+  booking-smoke:
+    image: ticket-live-app:local
+    profiles: ["smoke"]
+    entrypoint: ["node", "/app/scripts/container-booking-smoke.mjs"]
+    environment:
+      NODE_ENV: development
+      PUBLIC_API_URL: http://public-api:4002
+      MIGRATION_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      BOOKING_SMOKE_TIMEOUT_MS: 120000
