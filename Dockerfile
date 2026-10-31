@@ -1,4 +1,4 @@
-FROM node:24-bookworm-slim AS runtime
+FROM node:25-bookworm-slim AS runtime
 
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@11.24.0 --activate
@@ -10,7 +10,7 @@ EXPOSE 4002 4003 4004 4005 4006 4007 4008
 USER node
 ENTRYPOINT ["/app/docker/entrypoint.sh"]
 
-FROM node:24-bookworm-slim AS migrations
+FROM node:25-bookworm-slim AS migrations
 
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@11.24.0 --activate
