@@ -1,0 +1,16 @@
+title = "Ticket Live secret scan configuration"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Allow only obvious placeholder values in checked-in environment templates."
+condition = "AND"
+paths = [
+  '''^\.env\.example$''',
+  '''^\.env\.ci\.example$''',
+]
+regexTarget = "line"
+regexes = [
+  '''(?i)(local-|ci-|replace-with-|password\s*$)''',
+]

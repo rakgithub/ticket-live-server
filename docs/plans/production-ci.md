@@ -1,7 +1,7 @@
 # Production CI implementation plan
 
-Status: Steps 1–2 implemented; Step 3 implementation is in place pending CI
-execution; later steps remain proposed.
+Status: Steps 1–5 implementation is in place pending CI execution; later steps
+remain proposed.
 Date: 2026-10-30
 
 ## Objective
@@ -178,8 +178,8 @@ the README. These integration suites have not yet been run in GitHub Actions, so
 their runtime behavior and cleanup remain unverified. The migration test covers
 the database snapshot before service extraction; compatibility with a previous
 service binary is not asserted because the supported release window has not been
-selected. Runtime package behavior and full booking across all seven services
-remain outside Step 3 and are later coverage work.
+selected. Runtime package behavior remains outside Step 3; the seven-service
+booking flow is covered in Step 4 below.
 
 ## Step 4: Verify containers and critical booking flows
 
@@ -199,6 +199,21 @@ remain outside Step 3 and are later coverage work.
 Acceptance: valid packaging starts successfully and the critical booking flow
 works across HTTP and message boundaries without external provider credentials.
 
+Step 4 implementation progress: the container job validates the CI Compose
+overlay, builds the runtime and migration targets, provisions project-scoped
+Compose volumes with synthetic credentials, creates service roles, runs
+migrations before starting the seven app processes, and waits for their
+readiness. Its smoke flow creates a user and event through the Public API,
+checks event discovery through a deterministic Gemini response stub, then checks
+checkout, mock payment, confirmed inventory, ticket issuance, and fake email
+acceptance. RabbitMQ is stopped during checkout to verify the confirmed order
+remains pending in the outbox, then restarted before verifying message recovery.
+Failure logs are retained as a short-lived CI artifact, and cleanup removes the
+project's containers and volumes. These container checks have not yet been
+observed in a GitHub Actions run; local Docker was unavailable during
+implementation, so runtime startup, outage recovery, and cleanup still require
+that run.
+
 ## Step 5: Add security and useful reports
 
 1. Add dependency review for new vulnerable dependencies and disallowed licenses;
@@ -217,6 +232,24 @@ works across HTTP and message boundaries without external provider credentials.
 
 Acceptance: a representative vulnerable dependency and synthetic secret are caught
 in safe validation fixtures; maintainers can diagnose failures from retained output.
+
+Step 5 progress: `security.yml` runs dependency review on PRs, CodeQL for
+JavaScript/TypeScript and GitHub Actions, Gitleaks over repository history, and
+Trivy scans of the pnpm lockfile and both production image targets. A scheduled
+failure opens or updates an issue for the current repository owner until Step 6
+maps service ownership. Dependency review rejects new High/Critical findings and
+strong copyleft licenses; Trivy rejects High/Critical findings and requires
+owner/reason/expiry metadata for exceptions. Scanner fixtures create a random
+synthetic AWS-shaped secret and a known vulnerable lodash lockfile only in the
+runner's temporary directory. Unit, integration, outbox, and contract tests
+publish bounded JUnit/coverage reports; coverage has no threshold.
+
+The repository metadata confirms this is public, so GitHub Dependency Review is
+available without private-repository Code Security licensing. Public secret
+scanning and push protection are available by default, but the actual repository
+settings still need an owner-side check. The Security workflow is separate from
+`CI required`. Fixture detection, report upload, scheduled notification, and
+GitHub code-scanning ingestion remain unobserved until a GitHub Actions run.
 
 ## Step 6: Configure team ownership and branch protection
 
@@ -273,7 +306,8 @@ branch rules are active. A YAML file alone cannot establish production readiness
 
 - Actual team handles, protected branch, repository visibility and security plan.
 - Supported contract compatibility window and migration upgrade baseline.
-- Vulnerability exception policy, report retention, and required security gates.
+- Confirm the implemented vulnerability/license policy and report retention with
+  the repository owner; select required security gates after observing CI runs.
 - Registry, deployment platform, release ownership and environment approvals for
   the later delivery phase.
 
